@@ -16,6 +16,15 @@ SURREALDB_C_INCLUDE = $(SURREALDB_C_DIR)/include
 
 export CGO_LDFLAGS  := -L$(CURDIR)/$(SURREALDB_C_LIBDIR)
 
+# Rocksdb-enabled build uses a separate --target-dir so it doesn't
+# overwrite the default (mem + surrealkv) library.
+ifdef CARGO_BUILD_TARGET
+SURREALDB_C_ROCKSDB_LIBDIR = $(SURREALDB_C_DIR)/target-rocksdb/$(CARGO_BUILD_TARGET)/release
+else
+SURREALDB_C_ROCKSDB_LIBDIR = $(SURREALDB_C_DIR)/target-rocksdb/release
+endif
+SURREALDB_C_ROCKSDB_LIB = $(SURREALDB_C_ROCKSDB_LIBDIR)/libsurrealdb_c.a
+
 # ---------------------------------------------------------------------------
 # macOS: use Apple's system clang and SDK so CGo works even inside a Nix shell
 # (Nix-provided clang may be too old or have an incomplete SDK).
@@ -48,6 +57,28 @@ $(SURREALDB_C_LIB): $(SURREALDB_C_DIR)/Cargo.toml
 	cd $(SURREALDB_C_DIR) && cargo build --release
 	cp $(SURREALDB_C_INCLUDE)/surrealdb.h surrealdb.h
 
+# Patch Cargo.toml to add optional feature forwarding (idempotent).
+# Touch the default .a afterwards so Make doesn't think it needs
+# rebuilding (the patch only adds an unused [features] section).
+# Verify via git diff that the expected lines are present.
+$(SURREALDB_C_DIR)/.features-patched: $(SURREALDB_C_DIR)/Cargo.toml
+	@grep -q '\[features\]' $(SURREALDB_C_DIR)/Cargo.toml || { \
+		printf '\n[features]\nkv-rocksdb = ["surrealdb/kv-rocksdb"]\n' \
+			>> $(SURREALDB_C_DIR)/Cargo.toml; \
+	}
+	@cd $(SURREALDB_C_DIR) && git diff -- Cargo.toml | grep -q '+kv-rocksdb' || { \
+		echo "ERROR: Cargo.toml patch failed — expected [features] with kv-rocksdb"; \
+		echo "git diff -- Cargo.toml:"; \
+		cd $(SURREALDB_C_DIR) && git diff -- Cargo.toml; \
+		exit 1; \
+	}
+	@touch $@
+	@test -f $(SURREALDB_C_LIB) && touch $(SURREALDB_C_LIB) || true
+
+$(SURREALDB_C_ROCKSDB_LIB): $(SURREALDB_C_DIR)/.features-patched
+	cd $(SURREALDB_C_DIR) && cargo build --release --features kv-rocksdb --target-dir target-rocksdb
+	cp $(SURREALDB_C_INCLUDE)/surrealdb.h surrealdb.h
+
 # ---------------------------------------------------------------------------
 # Go targets
 # ---------------------------------------------------------------------------
@@ -65,8 +96,8 @@ test/mem: $(SURREALDB_C_LIB)
 test/surrealkv: $(SURREALDB_C_LIB)
 	SURREALDB_ENDPOINT=surrealkv:// go test -v -count=1 ./...
 
-test/rocksdb: $(SURREALDB_C_LIB)
-	SURREALDB_ENDPOINT=rocksdb:// go test -v -count=1 ./...
+test/rocksdb: $(SURREALDB_C_ROCKSDB_LIB)
+	CGO_LDFLAGS="-L$(CURDIR)/$(SURREALDB_C_ROCKSDB_LIBDIR)" SURREALDB_ENDPOINT=rocksdb:// go test -v -count=1 ./...
 
 example: example/basic example/surrealql
 
