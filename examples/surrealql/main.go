@@ -4,24 +4,32 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
+	"strings"
 
 	surrealdb "github.com/surrealdb/surrealdb.c.go"
 	"github.com/surrealdb/surrealdb.go/contrib/surrealql"
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	fmt.Println("=== SurrealDB + SurrealQL Query Builder Demo ===")
 	fmt.Println()
 
 	ctx := context.Background()
 	db, err := surrealdb.Open(ctx, "mem://")
 	if err != nil {
-		log.Fatalf("Open: %v", err)
+		return fmt.Errorf("Open: %w", err)
 	}
 	defer db.Close()
 
 	if err := db.Use(ctx, "demo_ns", "demo_db"); err != nil {
-		log.Fatalf("Use: %v", err)
+		return fmt.Errorf("Use: %w", err)
 	}
 
 	// 1. CREATE records using the query builder
@@ -48,10 +56,10 @@ func main() {
 		sql, vars := q.Build()
 		results, err := db.Query(ctx, sql, vars)
 		if err != nil {
-			log.Fatalf("CREATE %s: %v", p.id, err)
+			return fmt.Errorf("CREATE %s: %w", p.id, err)
 		}
 		if results[0].Err() != nil {
-			log.Fatalf("CREATE %s statement error: %v", p.id, results[0].Err())
+			return fmt.Errorf("CREATE %s statement error: %w", p.id, results[0].Err())
 		}
 		fmt.Printf("    Created person:%s\n", p.id)
 	}
@@ -65,7 +73,7 @@ func main() {
 	printQuery(sql, vars)
 	results, err := db.Query(ctx, sql, vars)
 	if err != nil {
-		log.Fatalf("SELECT: %v", err)
+		return fmt.Errorf("SELECT: %w", err)
 	}
 	printResults(results)
 
@@ -81,13 +89,13 @@ func main() {
 	printQuery(sql, vars)
 	results, err = db.Query(ctx, sql, vars)
 	if err != nil {
-		log.Fatalf("SELECT WHERE: %v", err)
+		return fmt.Errorf("SELECT WHERE: %w", err)
 	}
 	printResults(results)
 
 	// 4. UPDATE a record
 	fmt.Println()
-	fmt.Println("[4] UPDATE person:bob SET age = 26, email = 'bob.new@example.com' ...")
+	fmt.Println("[4] UPDATE person:bob ...")
 
 	uq := surrealql.Update("person:bob").
 		Set("age", 26).
@@ -96,7 +104,7 @@ func main() {
 	printQuery(sql, vars)
 	results, err = db.Query(ctx, sql, vars)
 	if err != nil {
-		log.Fatalf("UPDATE: %v", err)
+		return fmt.Errorf("UPDATE: %w", err)
 	}
 	printResults(results)
 
@@ -112,7 +120,7 @@ func main() {
 	printQuery(sql, vars)
 	results, err = db.Query(ctx, sql, vars)
 	if err != nil {
-		log.Fatalf("SELECT multi-where: %v", err)
+		return fmt.Errorf("SELECT multi-where: %w", err)
 	}
 	printResults(results)
 
@@ -127,7 +135,7 @@ func main() {
 	printQuery(sql, vars)
 	results, err = db.Query(ctx, sql, vars)
 	if err != nil {
-		log.Fatalf("COUNT: %v", err)
+		return fmt.Errorf("COUNT: %w", err)
 	}
 	printResults(results)
 
@@ -140,7 +148,7 @@ func main() {
 	printQuery(sql, vars)
 	results, err = db.Query(ctx, sql, vars)
 	if err != nil {
-		log.Fatalf("DELETE: %v", err)
+		return fmt.Errorf("DELETE: %w", err)
 	}
 	fmt.Printf("    Deleted (statement returned %d results)\n", len(results[0].Values()))
 
@@ -152,18 +160,28 @@ func main() {
 	sql, vars = q.Build()
 	results, err = db.Query(ctx, sql, vars)
 	if err != nil {
-		log.Fatalf("Final SELECT: %v", err)
+		return fmt.Errorf("Final SELECT: %w", err)
 	}
 	printResults(results)
 
 	fmt.Println()
 	fmt.Println("=== Demo complete! ===")
+	return nil
 }
 
 func printQuery(sql string, vars map[string]any) {
 	fmt.Printf("    SurrealQL: %s\n", sql)
 	if len(vars) > 0 {
-		fmt.Printf("    Vars: %v\n", vars)
+		keys := make([]string, 0, len(vars))
+		for k := range vars {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		parts := make([]string, len(keys))
+		for i, k := range keys {
+			parts[i] = fmt.Sprintf("%s:%v", k, vars[k])
+		}
+		fmt.Printf("    Vars: [%s]\n", strings.Join(parts, " "))
 	}
 }
 
