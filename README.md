@@ -8,26 +8,34 @@ Go bindings for embedded SurrealDB via the [surrealdb.c](https://github.com/surr
 package main
 
 import (
+    "context"
     "fmt"
     "log"
 
     surrealdb "github.com/surrealdb/surrealdb.c.go"
 )
 
+type Person struct {
+    ID   string `db:"id"`
+    Name string `db:"name"`
+    Age  int64  `db:"age"`
+}
+
 func main() {
-    db, err := surrealdb.Open("mem://")
+    ctx := context.Background()
+
+    db, err := surrealdb.Open(ctx, "mem://")
     if err != nil {
         log.Fatal(err)
     }
     defer db.Close()
 
-    db.Use("test", "test")
+    db.Use(ctx, "test", "test")
+    db.Query(ctx, `CREATE person:alice SET name = "Alice", age = 30`, nil)
 
-    results, _ := db.Query(`CREATE person:alice SET name = "Alice", age = 30`, nil)
-    for _, r := range results {
-        for _, v := range r.Values() {
-            fmt.Println(v.String())
-        }
+    results, _ := surrealdb.Query[Person](ctx, db, "SELECT * FROM person", nil)
+    for _, p := range results[0].Values() {
+        fmt.Printf("%s: %s (age %d)\n", p.ID, p.Name, p.Age)
     }
 }
 ```
@@ -160,10 +168,12 @@ environment variables are needed — just `go build`.
 ### Connection lifecycle
 
 ```go
-db, err := surrealdb.Open("mem://")     // or "surrealkv://path", "ws://host:port"
+ctx := context.Background()
+
+db, err := surrealdb.Open(ctx, "mem://")     // or "surrealkv://path", "ws://host:port"
 defer db.Close()
 
-db.Use("my_namespace", "my_database")
+db.Use(ctx, "my_namespace", "my_database")
 
 ver, _ := db.Version()  // "2.4.1"
 db.Health()              // nil if healthy
@@ -171,19 +181,28 @@ db.Health()              // nil if healthy
 
 ### Querying
 
+All query methods accept a `context.Context` for timeout/cancellation.
+The `vars` parameter accepts `nil`, `*Object`, `map[string]any`, or any struct
+with `db:"..."` tags — marshaling is automatic.
+
 ```go
 // Simple query
-results, err := db.Query("SELECT * FROM person", nil)
+results, err := db.Query(ctx, "SELECT * FROM person", nil)
 
-// Parameterized query
-vars := surrealdb.NewObject()
-vars.InsertInt("min_age", 18)
-defer vars.Free()
+// Parameterized with a map
+results, err := db.Query(ctx,
+    "SELECT * FROM person WHERE age >= $min_age",
+    map[string]any{"min_age": 18},
+)
 
-results, err := db.Query("SELECT * FROM person WHERE age >= $min_age", vars)
+// Parameterized with a struct
+results, err := db.Query(ctx,
+    "SELECT * FROM person WHERE age >= $min_age",
+    struct { MinAge int `db:"min_age"` }{MinAge: 18},
+)
 
 // Multi-statement
-results, err := db.Query(
+results, err := db.Query(ctx,
     "SELECT count() AS n FROM person GROUP ALL;" +
     "SELECT math::mean(age) AS avg FROM person GROUP ALL;",
     nil,
@@ -191,7 +210,24 @@ results, err := db.Query(
 // results[0] has the count, results[1] has the average
 ```
 
-### Reading results
+### Typed queries with `Query[T]`
+
+`surrealdb.Query[T]` unmarshals each result row into a Go struct automatically:
+
+```go
+type Person struct {
+    ID   string `db:"id"`
+    Name string `db:"name"`
+    Age  int64  `db:"age"`
+}
+
+results, err := surrealdb.Query[Person](ctx, db, "SELECT * FROM person", nil)
+for _, p := range results[0].Values() {
+    fmt.Printf("%s: %s (age %d)\n", p.ID, p.Name, p.Age)
+}
+```
+
+### Reading untyped results
 
 ```go
 for _, stmt := range results {
@@ -238,7 +274,7 @@ defer obj.Free()
 
 ```go
 // Start listening for changes on the "person" table
-lq, err := db.Live("person")
+lq, err := db.Live(ctx, "person")
 if err != nil {
     log.Fatal(err)
 }
