@@ -15,7 +15,7 @@ import (
 // Fields tagged `db:"-"` are skipped.
 //
 // Supported field types: string, bool, int (all sizes), uint (all sizes),
-// float32, float64, and nested structs (recursively marshaled).
+// float32, float64, nested structs, and maps (recursively marshaled).
 //
 // The caller must call Free on the returned Object when done.
 func MarshalObject(v any) (*Object, error) {
@@ -45,7 +45,7 @@ func marshalStruct(rv reflect.Value) (*Object, error) {
 		}
 
 		fv := rv.Field(i)
-		if err := insertField(obj, key, fv); err != nil {
+		if err := insertValue(obj, key, fv); err != nil {
 			obj.Free()
 			return nil, fmt.Errorf("field %s: %w", field.Name, err)
 		}
@@ -65,7 +65,7 @@ func fieldKey(f reflect.StructField) string {
 	return strings.ToLower(f.Name)
 }
 
-func insertField(obj *Object, key string, fv reflect.Value) error {
+func insertValue(obj *Object, key string, fv reflect.Value) error {
 	switch fv.Kind() {
 	case reflect.String:
 		obj.InsertStr(key, fv.String())
@@ -79,6 +79,13 @@ func insertField(obj *Object, key string, fv reflect.Value) error {
 		obj.InsertFloat(key, fv.Float())
 	case reflect.Struct:
 		nested, err := marshalStruct(fv)
+		if err != nil {
+			return err
+		}
+		obj.InsertObject(key, nested)
+		nested.Free()
+	case reflect.Map:
+		nested, err := marshalMap(fv)
 		if err != nil {
 			return err
 		}

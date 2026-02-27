@@ -14,6 +14,7 @@ import "fmt"
 //   - nil: no parameters
 //   - *Object: passed directly (caller manages its lifetime)
 //   - struct or *struct: marshaled via MarshalObject using `db:"..."` tags
+//   - map[string]any: marshaled via MarshalMap
 //
 // Example with a struct:
 //
@@ -26,6 +27,13 @@ func (db *DB) Query(sql string, vars any) ([]QueryResult, error) {
 		return db.query(sql, nil)
 	case *Object:
 		return db.query(sql, v)
+	case map[string]any:
+		obj, err := MarshalMap(v)
+		if err != nil {
+			return nil, fmt.Errorf("marshal query vars: %w", err)
+		}
+		defer obj.Free()
+		return db.query(sql, obj)
 	default:
 		obj, err := MarshalObject(v)
 		if err != nil {
