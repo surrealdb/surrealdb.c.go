@@ -79,9 +79,26 @@ Copy this Makefile into your project to automate the surrealdb.c build:
 SURREALDB_C_REPO ?= https://github.com/surrealdb/surrealdb.c.git
 SURREALDB_C_REF  ?= main
 SURREALDB_C_DIR  ?= build/surrealdb.c
-SURREALDB_C_LIB   = $(SURREALDB_C_DIR)/target/release/libsurrealdb_c.a
 
-export CGO_LDFLAGS := -L$(CURDIR)/$(SURREALDB_C_DIR)/target/release
+ifdef CARGO_BUILD_TARGET
+SURREALDB_C_LIBDIR = $(SURREALDB_C_DIR)/target/$(CARGO_BUILD_TARGET)/release
+else
+SURREALDB_C_LIBDIR = $(SURREALDB_C_DIR)/target/release
+endif
+
+SURREALDB_C_LIB = $(SURREALDB_C_LIBDIR)/libsurrealdb_c.a
+
+export CGO_LDFLAGS := -L$(CURDIR)/$(SURREALDB_C_LIBDIR)
+
+# macOS: ensure Apple's system clang and SDK are used
+ifeq ($(shell uname -s),Darwin)
+  ifneq (,$(wildcard /Library/Developer/CommandLineTools/usr/bin/clang))
+    export CC := /Library/Developer/CommandLineTools/usr/bin/clang
+  endif
+  ifneq (,$(wildcard /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib))
+    export SDKROOT := /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+  endif
+endif
 
 .PHONY: build run test clean
 
@@ -150,6 +167,30 @@ Or install system-wide:
 sudo cp target/release/libsurrealdb_c.a /usr/local/lib/
 # Then go build works without env vars
 ```
+
+### macOS notes
+
+On macOS you need Apple's system clang (not a third-party clang such as the
+one provided by Nix or Homebrew's `llvm`) and the real macOS SDK. The Makefile
+sets these automatically, but when running `go build` directly you may need to
+export them yourself:
+
+```bash
+# Use Apple's Command Line Tools clang
+export CC=/Library/Developer/CommandLineTools/usr/bin/clang
+
+# Point to the real macOS SDK (important inside Nix shells where SDKROOT
+# may reference an incomplete SDK)
+export SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+
+# If CARGO_BUILD_TARGET is set, cargo places output in a target-specific
+# subdirectory (e.g. target/aarch64-apple-darwin/release instead of
+# target/release). Adjust CGO_LDFLAGS accordingly:
+export CGO_LDFLAGS="-L/path/to/surrealdb.c/target/aarch64-apple-darwin/release"
+```
+
+If you don't use Nix and have Xcode or Command Line Tools installed normally,
+`CC` and `SDKROOT` typically don't need to be set — the defaults just work.
 
 ### Building your own application manually
 
@@ -292,9 +333,13 @@ db.Kill(lq)
 
 ## Linking strategy
 
-The `#cgo` directive uses `-Wl,-Bstatic -lsurrealdb_c -Wl,-Bdynamic` to force
-static linking of the SurrealDB library while keeping system libraries dynamic.
-This produces a self-contained binary with no runtime dependency on `libsurrealdb_c.so`.
+The `#cgo` directives statically link `libsurrealdb_c.a` while keeping system
+libraries dynamic, producing a self-contained binary with no runtime dependency
+on a shared `libsurrealdb_c`.
+
+- **Linux** — uses `-Wl,-Bstatic -lsurrealdb_c -Wl,-Bdynamic` (GNU ld) plus
+  `-lpthread -ldl -lm -lrt -lstdc++`.
+- **macOS** — uses `-lsurrealdb_c -framework CoreFoundation -lresolv -lm -lc++`.
 
 Users only need to set `CGO_LDFLAGS` to the directory containing `libsurrealdb_c.a`.
 

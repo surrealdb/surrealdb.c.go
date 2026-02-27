@@ -2,11 +2,34 @@ SURREALDB_C_REPO ?= https://github.com/surrealdb/surrealdb.c.git
 SURREALDB_C_REF  ?= main
 SURREALDB_C_DIR  ?= build/surrealdb.c
 
-SURREALDB_C_LIB     = $(SURREALDB_C_DIR)/target/release/libsurrealdb_c.a
+# When CARGO_BUILD_TARGET is set (e.g. aarch64-apple-darwin), cargo places
+# artifacts under target/$(CARGO_BUILD_TARGET)/release instead of
+# target/release.  Detect this so the paths work on both Linux CI and macOS.
+ifdef CARGO_BUILD_TARGET
+SURREALDB_C_LIBDIR = $(SURREALDB_C_DIR)/target/$(CARGO_BUILD_TARGET)/release
+else
+SURREALDB_C_LIBDIR = $(SURREALDB_C_DIR)/target/release
+endif
+
+SURREALDB_C_LIB     = $(SURREALDB_C_LIBDIR)/libsurrealdb_c.a
 SURREALDB_C_INCLUDE = $(SURREALDB_C_DIR)/include
 
-# Only CGO_LDFLAGS is needed — the header is vendored in surrealdb.h
-export CGO_LDFLAGS  := -L$(CURDIR)/$(SURREALDB_C_DIR)/target/release
+export CGO_LDFLAGS  := -L$(CURDIR)/$(SURREALDB_C_LIBDIR)
+
+# ---------------------------------------------------------------------------
+# macOS: use Apple's system clang and SDK so CGo works even inside a Nix shell
+# (Nix-provided clang may be too old or have an incomplete SDK).
+# ---------------------------------------------------------------------------
+ifeq ($(shell uname -s),Darwin)
+  APPLE_CLT_CC := /Library/Developer/CommandLineTools/usr/bin/clang
+  ifneq (,$(wildcard $(APPLE_CLT_CC)))
+    export CC := $(APPLE_CLT_CC)
+  endif
+  MACOS_SDK_CLT := /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+  ifneq (,$(wildcard $(MACOS_SDK_CLT)/usr/lib))
+    export SDKROOT := $(MACOS_SDK_CLT)
+  endif
+endif
 
 .PHONY: all build test clean example
 

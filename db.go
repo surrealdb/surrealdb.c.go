@@ -1,7 +1,8 @@
 package surrealdb
 
 /*
-#cgo LDFLAGS: -Wl,-Bstatic -lsurrealdb_c -Wl,-Bdynamic -lpthread -ldl -lm -lrt -lstdc++
+#cgo linux LDFLAGS: -Wl,-Bstatic -lsurrealdb_c -Wl,-Bdynamic -lpthread -ldl -lm -lrt -lstdc++
+#cgo darwin LDFLAGS: -lsurrealdb_c -framework CoreFoundation -lresolv -lm -lc++
 #include <stdlib.h>
 #include "surrealdb.h"
 */
