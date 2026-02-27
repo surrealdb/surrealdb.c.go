@@ -2,15 +2,36 @@ package surrealdb
 
 import (
 	"context"
+	"os"
+	"strings"
 	"testing"
 	"time"
 )
 
-// openTestDB is a helper that opens an in-memory DB with namespace/database set.
+// testEndpoint returns the SurrealDB endpoint to use for tests.
+// Set SURREALDB_ENDPOINT to override (default: "mem://").
+// For file-backed schemes (rocksdb://, surrealkv://), a per-test temp
+// directory is appended automatically when no path is provided.
+func testEndpoint(t *testing.T) string {
+	t.Helper()
+	ep := os.Getenv("SURREALDB_ENDPOINT")
+	if ep == "" {
+		ep = "mem://"
+	}
+	for _, scheme := range []string{"rocksdb://", "surrealkv://"} {
+		if strings.HasPrefix(ep, scheme) && len(ep) == len(scheme) {
+			return scheme + t.TempDir()
+		}
+	}
+	return ep
+}
+
+// openTestDB is a helper that opens a DB with namespace/database set.
+// The backend is determined by testEndpoint (SURREALDB_ENDPOINT env var).
 func openTestDB(t *testing.T) *DB {
 	t.Helper()
 	ctx := context.Background()
-	db, err := Open(ctx, "mem://")
+	db, err := Open(ctx, testEndpoint(t))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -22,7 +43,7 @@ func openTestDB(t *testing.T) *DB {
 }
 
 func TestOpenClose(t *testing.T) {
-	db, err := Open(context.Background(), "mem://")
+	db, err := Open(context.Background(), testEndpoint(t))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -32,7 +53,7 @@ func TestOpenClose(t *testing.T) {
 }
 
 func TestVersion(t *testing.T) {
-	db, err := Open(context.Background(), "mem://")
+	db, err := Open(context.Background(), testEndpoint(t))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -49,7 +70,7 @@ func TestVersion(t *testing.T) {
 }
 
 func TestHealth(t *testing.T) {
-	db, err := Open(context.Background(), "mem://")
+	db, err := Open(context.Background(), testEndpoint(t))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -61,7 +82,7 @@ func TestHealth(t *testing.T) {
 }
 
 func TestUse(t *testing.T) {
-	db, err := Open(context.Background(), "mem://")
+	db, err := Open(context.Background(), testEndpoint(t))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

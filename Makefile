@@ -31,7 +31,7 @@ ifeq ($(shell uname -s),Darwin)
   endif
 endif
 
-.PHONY: all build test clean example
+.PHONY: all build test test/mem test/surrealkv test/rocksdb clean example
 
 all: build
 
@@ -55,8 +55,16 @@ $(SURREALDB_C_LIB): $(SURREALDB_C_DIR)/Cargo.toml
 build: $(SURREALDB_C_LIB)
 	go build ./...
 
-test: $(SURREALDB_C_LIB)
-	go test -v ./...
+test: test/mem test/surrealkv
+
+test/mem: $(SURREALDB_C_LIB)
+	SURREALDB_ENDPOINT=mem:// go test -v -count=1 ./...
+
+test/surrealkv: $(SURREALDB_C_LIB)
+	SURREALDB_ENDPOINT=surrealkv:// go test -v -count=1 ./...
+
+test/rocksdb: $(SURREALDB_C_LIB)
+	SURREALDB_ENDPOINT=rocksdb:// go test -v -count=1 ./...
 
 example: $(SURREALDB_C_LIB)
 	cd example && go run .
