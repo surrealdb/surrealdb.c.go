@@ -1,68 +1,56 @@
 package surrealdb
 
-// #include "surrealdb.h"
-import "C"
-
 import "fmt"
 
-// Query executes a SurrealQL query and returns results for each statement.
-//
-// The sql string may contain multiple semicolon-separated statements.
-// Each statement produces one QueryResult in the returned slice.
-//
-// vars is automatically marshaled to a SurrealDB object:
-//   - nil: no parameters
-//   - *Object: passed directly (caller manages its lifetime)
-//   - struct or *struct: marshaled via MarshalObject using `db:"..."` tags
-//   - map[string]any: marshaled via MarshalMap
-//
-// Example with a struct:
-//
-//	results, err := db.Query("SELECT * FROM person WHERE age >= $min_age", struct {
-//	    MinAge int `db:"min_age"`
-//	}{MinAge: 18})
-func (db *DB) Query(sql string, vars any) ([]QueryResult, error) {
-	switch v := vars.(type) {
-	case nil:
-		return db.query(sql, nil)
-	case *Object:
-		return db.query(sql, v)
-	case map[string]any:
-		obj, err := MarshalMap(v)
-		if err != nil {
-			return nil, fmt.Errorf("marshal query vars: %w", err)
-		}
-		defer obj.Free()
-		return db.query(sql, obj)
-	default:
-		obj, err := MarshalObject(v)
-		if err != nil {
-			return nil, fmt.Errorf("marshal query vars: %w", err)
-		}
-		defer obj.Free()
-		return db.query(sql, obj)
-	}
+// Result holds the outcome of a single statement, with values unmarshaled to T.
+type Result[T any] struct {
+	values []T
+	err    error
 }
 
-func (db *DB) query(sql string, vars *Object) ([]QueryResult, error) {
-	cSQL := cstring(sql)
-	defer freeCString(cSQL)
+// Values returns the unmarshaled result records for this statement.
+func (r *Result[T]) Values() []T { return r.values }
 
-	var cVars *C.sr_object_t
-	if vars != nil {
-		cVars = vars.cptr()
-	}
+// Err returns the per-statement error, if any.
+func (r *Result[T]) Err() error { return r.err }
 
-	var errPtr C.sr_string_t
-	var results *C.sr_arr_res_t
-
-	rc := C.sr_query(db.c, &errPtr, &results, cSQL, cVars)
-	if err := surrealError(rc, errPtr); err != nil {
+// Query executes a SurrealQL query and unmarshals each result row into T.
+//
+// T is typically a struct with `db:"..."` tags matching the returned fields.
+// Primitive types (string, int, int64, float64, bool) are also supported.
+//
+// vars follows the same rules as DB.Query (nil, *Object, struct, map[string]any).
+//
+// Example:
+//
+//	type Person struct {
+//	    Name string `db:"name"`
+//	    Age  int64  `db:"age"`
+//	}
+//	results, err := surrealdb.Query[Person](db, "SELECT * FROM person", nil)
+//	for _, p := range results[0].Values() {
+//	    fmt.Println(p.Name, p.Age)
+//	}
+func Query[T any](db *DB, sql string, vars any) ([]Result[T], error) {
+	raw, err := db.Query(sql, vars)
+	if err != nil {
 		return nil, err
 	}
 
-	numStatements := int(rc)
-	out := extractResults(results, numStatements)
-	C.sr_free_arr_res_arr(results, rc)
+	out := make([]Result[T], len(raw))
+	for i, r := range raw {
+		if r.err != nil {
+			out[i].err = r.err
+			continue
+		}
+		out[i].values = make([]T, len(r.values))
+		for j, v := range r.values {
+			t, err := unmarshalValue[T](v)
+			if err != nil {
+				return nil, fmt.Errorf("statement %d, row %d: %w", i, j, err)
+			}
+			out[i].values[j] = t
+		}
+	}
 	return out, nil
 }

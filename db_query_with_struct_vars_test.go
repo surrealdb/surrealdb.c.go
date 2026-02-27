@@ -2,7 +2,7 @@ package surrealdb
 
 import "testing"
 
-func TestQueryWithMapVars(t *testing.T) {
+func TestDBQueryWithStructVars(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()
 
@@ -10,9 +10,13 @@ func TestQueryWithMapVars(t *testing.T) {
 	db.Query(`CREATE person:b SET name = "B", age = 30`, nil)
 	db.Query(`CREATE person:c SET name = "C", age = 40`, nil)
 
+	type Vars struct {
+		MinAge int `db:"min_age"`
+	}
+
 	results, err := db.Query(
 		"SELECT * FROM person WHERE age >= $min_age ORDER BY age ASC",
-		map[string]any{"min_age": 25},
+		Vars{MinAge: 25},
 	)
 	if err != nil {
 		t.Fatalf("Query: %v", err)
