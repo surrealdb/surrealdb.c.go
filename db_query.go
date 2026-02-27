@@ -3,12 +3,19 @@ package surrealdb
 // #include "surrealdb.h"
 import "C"
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+)
 
 // Query executes a SurrealQL query and returns results for each statement.
 //
 // The sql string may contain multiple semicolon-separated statements.
 // Each statement produces one QueryResult in the returned slice.
+//
+// The context controls the query timeout. If ctx is cancelled while the
+// C call is in progress, the goroutine continues to completion in the
+// background (bounded by DefaultMaxPendingOps per DB).
 //
 // vars is automatically marshaled to a SurrealDB object:
 //   - nil: no parameters
@@ -18,30 +25,41 @@ import "fmt"
 //
 // Example with a struct:
 //
-//	results, err := db.Query("SELECT * FROM person WHERE age >= $min_age", struct {
+//	results, err := db.Query(ctx, "SELECT * FROM person WHERE age >= $min_age", struct {
 //	    MinAge int `db:"min_age"`
 //	}{MinAge: 18})
-func (db *DB) Query(sql string, vars any) ([]QueryResult, error) {
+func (db *DB) Query(ctx context.Context, sql string, vars any) ([]QueryResult, error) {
+	// Marshal vars before entering the semaphore-gated goroutine,
+	// so marshaling errors are returned immediately.
+	var obj *Object
+	var freeObj bool
 	switch v := vars.(type) {
 	case nil:
-		return db.query(sql, nil)
+		// no vars
 	case *Object:
-		return db.query(sql, v)
+		obj = v
 	case map[string]any:
-		obj, err := MarshalMap(v)
+		o, err := MarshalMap(v)
 		if err != nil {
 			return nil, fmt.Errorf("marshal query vars: %w", err)
 		}
-		defer obj.Free()
-		return db.query(sql, obj)
+		obj = o
+		freeObj = true
 	default:
-		obj, err := MarshalObject(v)
+		o, err := MarshalObject(v)
 		if err != nil {
 			return nil, fmt.Errorf("marshal query vars: %w", err)
 		}
-		defer obj.Free()
-		return db.query(sql, obj)
+		obj = o
+		freeObj = true
 	}
+
+	return runWithSem(ctx, db.sem, func() ([]QueryResult, error) {
+		if freeObj {
+			defer obj.Free()
+		}
+		return db.query(sql, obj)
+	}, nil)
 }
 
 func (db *DB) query(sql string, vars *Object) ([]QueryResult, error) {

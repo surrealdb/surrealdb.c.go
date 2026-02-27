@@ -74,7 +74,7 @@ func Open(ctx context.Context, endpoint string) (*DB, error) {
 		if res.err != nil {
 			return nil, res.err
 		}
-		return &DB{c: res.surreal, live: newLiveQueryMap()}, nil
+		return &DB{c: res.surreal, live: newLiveQueryMap(), sem: make(chan struct{}, DefaultMaxPendingOps)}, nil
 
 	case <-ctx.Done():
 		// sr_connect is still running. The goroutine will finish eventually,

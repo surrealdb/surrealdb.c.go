@@ -13,12 +13,19 @@ import (
 	"unsafe"
 )
 
+// DefaultMaxPendingOps is the maximum number of goroutines that may be blocked
+// inside C FFI calls (query, use, live) per DB instance at any time.
+// This bounds the worst-case goroutine leak when callers cancel their context
+// before a C call returns.
+var DefaultMaxPendingOps = 16
+
 // DB is a handle to an open SurrealDB connection.
 // It wraps the C sr_surreal_t pointer and is safe to use from multiple goroutines.
 // Call Close when done to release the underlying resources.
 type DB struct {
 	c    *C.sr_surreal_t
 	live *liveQueryMap
+	sem  chan struct{}
 }
 
 // surrealError converts a C return code and error string into a Go error.

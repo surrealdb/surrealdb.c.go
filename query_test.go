@@ -1,13 +1,17 @@
 package surrealdb
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestQuery(t *testing.T) {
+	ctx := context.Background()
 	db := openTestDB(t)
 	defer db.Close()
 
-	db.Query(`CREATE person:a SET name = "Alice", age = 30`, nil)
-	db.Query(`CREATE person:b SET name = "Bob", age = 25`, nil)
+	db.Query(ctx, `CREATE person:a SET name = "Alice", age = 30`, nil)
+	db.Query(ctx, `CREATE person:b SET name = "Bob", age = 25`, nil)
 
 	type Person struct {
 		ID   string `db:"id"`
@@ -15,7 +19,7 @@ func TestQuery(t *testing.T) {
 		Age  int64  `db:"age"`
 	}
 
-	results, err := Query[Person](db, "SELECT * FROM person ORDER BY age ASC", nil)
+	results, err := Query[Person](ctx, db, "SELECT * FROM person ORDER BY age ASC", nil)
 	if err != nil {
 		t.Fatalf("Query[Person]: %v", err)
 	}
@@ -45,19 +49,20 @@ func TestQuery(t *testing.T) {
 }
 
 func TestQueryWithStructVars(t *testing.T) {
+	ctx := context.Background()
 	db := openTestDB(t)
 	defer db.Close()
 
-	db.Query(`CREATE person:a SET name = "A", age = 20`, nil)
-	db.Query(`CREATE person:b SET name = "B", age = 30`, nil)
-	db.Query(`CREATE person:c SET name = "C", age = 40`, nil)
+	db.Query(ctx, `CREATE person:a SET name = "A", age = 20`, nil)
+	db.Query(ctx, `CREATE person:b SET name = "B", age = 30`, nil)
+	db.Query(ctx, `CREATE person:c SET name = "C", age = 40`, nil)
 
 	type Row struct {
 		Name string `db:"name"`
 		Age  int64  `db:"age"`
 	}
 
-	results, err := Query[Row](db,
+	results, err := Query[Row](ctx, db,
 		"SELECT name, age FROM person WHERE age >= $min_age ORDER BY age ASC",
 		map[string]any{"min_age": 25},
 	)

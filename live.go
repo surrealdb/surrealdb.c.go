@@ -4,6 +4,7 @@ package surrealdb
 import "C"
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -147,13 +148,13 @@ func poisonRecordID(lq *LiveQuery) string {
 // triggers a notification on the live query stream and unblocks sr_stream_next.
 func sendPoisonPill(db *DB, lq *LiveQuery) {
 	rid := poisonRecordID(lq)
-	db.Query(fmt.Sprintf("CREATE %s SET __lq = true", rid), nil)
+	db.query(fmt.Sprintf("CREATE %s SET __lq = true", rid), nil)
 }
 
 // cleanupPoisonPill removes the dummy record inserted by sendPoisonPill.
 func cleanupPoisonPill(db *DB, lq *LiveQuery) {
 	rid := poisonRecordID(lq)
-	db.Query(fmt.Sprintf("DELETE %s", rid), nil)
+	db.query(fmt.Sprintf("DELETE %s", rid), nil)
 }
 
 // killServerSide terminates the server-side live query subscription.
@@ -174,53 +175,69 @@ func killServerSide(db *DB, lq *LiveQuery) {
 // Live creates a live query on the given resource (table name) and returns
 // a LiveQuery whose Ch channel receives notifications as they arrive.
 //
+// The context controls the timeout for the sr_select_live C call. If ctx is
+// cancelled after the call starts but before it completes, the goroutine
+// finishes in the background and the stream is killed.
+//
 // Use lq.ID to identify the session, and db.Kill(lq) to stop it.
-func (db *DB) Live(resource string) (*LiveQuery, error) {
-	cRes := cstring(resource)
-	defer freeCString(cRes)
+func (db *DB) Live(ctx context.Context, resource string) (*LiveQuery, error) {
+	return runWithSem(ctx, db.sem, func() (*LiveQuery, error) {
+		cRes := cstring(resource)
+		defer freeCString(cRes)
 
-	var errPtr C.sr_string_t
-	var streamPtr *C.sr_stream_t
-	rc := C.sr_select_live(db.c, &errPtr, &streamPtr, cRes)
-	if err := surrealError(rc, errPtr); err != nil {
-		return nil, err
-	}
-
-	ch := make(chan Notification, 64)
-	done := make(chan struct{})
-	lq := &LiveQuery{
-		ID:       generateID(),
-		Ch:       ch,
-		stream:   streamPtr,
-		resource: resource,
-		done:     done,
-	}
-
-	db.live.add(lq)
-
-	go func() {
-		defer close(done)
-		defer close(ch)
-		// The goroutine owns the stream: it is the only caller of
-		// sr_stream_next, and it frees the stream when done.
-		defer C.sr_stream_kill(streamPtr)
-
-		for {
-			var cn C.sr_notification_t
-			rc := C.sr_stream_next(streamPtr, &cn)
-			if rc <= 0 {
-				return
-			}
-			if lq.stopping.Load() {
-				return
-			}
-			n := extractNotification(&cn)
-			lq.srvQueryID.CompareAndSwap(nil, n.QueryID)
-			ch <- n
+		var errPtr C.sr_string_t
+		var streamPtr *C.sr_stream_t
+		rc := C.sr_select_live(db.c, &errPtr, &streamPtr, cRes)
+		if err := surrealError(rc, errPtr); err != nil {
+			return nil, err
 		}
-	}()
 
-	return lq, nil
+		ch := make(chan Notification, 64)
+		done := make(chan struct{})
+		lq := &LiveQuery{
+			ID:       generateID(),
+			Ch:       ch,
+			stream:   streamPtr,
+			resource: resource,
+			done:     done,
+		}
+
+		db.live.add(lq)
+
+		go func() {
+			defer close(done)
+			defer close(ch)
+			// The goroutine owns the stream: it is the only caller of
+			// sr_stream_next, and it frees the stream when done.
+			defer C.sr_stream_kill(streamPtr)
+
+			for {
+				var cn C.sr_notification_t
+				rc := C.sr_stream_next(streamPtr, &cn)
+				if rc <= 0 {
+					return
+				}
+				if lq.stopping.Load() {
+					return
+				}
+				n := extractNotification(&cn)
+				lq.srvQueryID.CompareAndSwap(nil, n.QueryID)
+				ch <- n
+			}
+		}()
+
+		return lq, nil
+	}, func(lq *LiveQuery) {
+		// Cleanup on context cancellation: stop and kill the stream.
+		lq.stopping.Store(true)
+		sendPoisonPill(db, lq)
+		go func() {
+			<-lq.done
+			killServerSide(db, lq)
+			cleanupPoisonPill(db, lq)
+			db.live.remove(lq.ID)
+		}()
+	})
 }
 
 // Kill stops a live query session and frees its resources.

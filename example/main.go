@@ -20,7 +20,8 @@ func main() {
 	fmt.Println()
 
 	// 1. Open an in-memory embedded database
-	db, err := surrealdb.Open(context.Background(), "mem://")
+	ctx := context.Background()
+	db, err := surrealdb.Open(ctx, "mem://")
 	if err != nil {
 		log.Fatalf("Open: %v", err)
 	}
@@ -33,7 +34,7 @@ func main() {
 	fmt.Printf("[1] Connected — SurrealDB %s\n", ver)
 
 	// 2. Select namespace and database
-	if err := db.Use("demo_ns", "demo_db"); err != nil {
+	if err := db.Use(ctx, "demo_ns", "demo_db"); err != nil {
 		log.Fatalf("Use: %v", err)
 	}
 	fmt.Println("[2] Namespace: demo_ns, Database: demo_db")
@@ -55,7 +56,7 @@ func main() {
 			log.Fatalf("MarshalObject: %v", err)
 		}
 		outer := wrapData(vars)
-		results, err := db.Query(
+		results, err := db.Query(ctx,
 			fmt.Sprintf("CREATE %s CONTENT $data", entry.id),
 			outer,
 		)
@@ -70,7 +71,7 @@ func main() {
 	// 5. SELECT all records
 	fmt.Println()
 	fmt.Println("[5] SELECT * FROM person ORDER BY name...")
-	results, err := db.Query("SELECT * FROM person ORDER BY name ASC", nil)
+	results, err := db.Query(ctx,"SELECT * FROM person ORDER BY name ASC", nil)
 	if err != nil {
 		log.Fatalf("SELECT: %v", err)
 	}
@@ -79,7 +80,7 @@ func main() {
 	// 6. UPDATE a record
 	fmt.Println()
 	fmt.Println("[6] UPDATE person:bob...")
-	results, err = db.Query(
+	results, err = db.Query(ctx,
 		`UPDATE person:bob SET name = "Bob Updated", age = 26, active = true, email = "bob@example.com"`,
 		nil,
 	)
@@ -93,7 +94,7 @@ func main() {
 	fmt.Println("[7] SELECT WHERE age >= $min_age (30)...")
 	vars := surrealdb.NewObject()
 	vars.InsertInt("min_age", 30)
-	results, err = db.Query(
+	results, err = db.Query(ctx,
 		"SELECT * FROM person WHERE age >= $min_age ORDER BY age ASC",
 		vars,
 	)
@@ -106,7 +107,7 @@ func main() {
 	// 8. Multi-statement query
 	fmt.Println()
 	fmt.Println("[8] Multi-statement: count + average age...")
-	results, err = db.Query(
+	results, err = db.Query(ctx,
 		"SELECT count() AS total FROM person GROUP ALL;"+
 			"SELECT math::mean(age) AS avg_age FROM person GROUP ALL;",
 		nil,
@@ -119,7 +120,7 @@ func main() {
 	// 9. Final state
 	fmt.Println()
 	fmt.Println("[9] Final state...")
-	results, err = db.Query("SELECT * FROM person ORDER BY name ASC", nil)
+	results, err = db.Query(ctx,"SELECT * FROM person ORDER BY name ASC", nil)
 	if err != nil {
 		log.Fatalf("Final SELECT: %v", err)
 	}

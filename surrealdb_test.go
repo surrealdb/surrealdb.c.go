@@ -9,11 +9,12 @@ import (
 // openTestDB is a helper that opens an in-memory DB with namespace/database set.
 func openTestDB(t *testing.T) *DB {
 	t.Helper()
-	db, err := Open(context.Background(), "mem://")
+	ctx := context.Background()
+	db, err := Open(ctx, "mem://")
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	if err := db.Use("test_ns", "test_db"); err != nil {
+	if err := db.Use(ctx, "test_ns", "test_db"); err != nil {
 		db.Close()
 		t.Fatalf("Use: %v", err)
 	}
@@ -66,17 +67,18 @@ func TestUse(t *testing.T) {
 	}
 	defer db.Close()
 
-	if err := db.Use("my_ns", "my_db"); err != nil {
+	if err := db.Use(context.Background(), "my_ns", "my_db"); err != nil {
 		t.Fatalf("Use: %v", err)
 	}
 }
 
 func TestQueryCreateAndSelect(t *testing.T) {
+	ctx := context.Background()
 	db := openTestDB(t)
 	defer db.Close()
 
 	// CREATE
-	results, err := db.Query(`CREATE person:alice SET name = "Alice", age = 30`, nil)
+	results, err := db.Query(ctx, `CREATE person:alice SET name = "Alice", age = 30`, nil)
 	if err != nil {
 		t.Fatalf("CREATE: %v", err)
 	}
@@ -91,7 +93,7 @@ func TestQueryCreateAndSelect(t *testing.T) {
 	}
 
 	// SELECT
-	results, err = db.Query("SELECT * FROM person", nil)
+	results, err = db.Query(ctx, "SELECT * FROM person", nil)
 	if err != nil {
 		t.Fatalf("SELECT: %v", err)
 	}
@@ -141,18 +143,19 @@ func TestQueryCreateAndSelect(t *testing.T) {
 }
 
 func TestQueryParameterized(t *testing.T) {
+	ctx := context.Background()
 	db := openTestDB(t)
 	defer db.Close()
 
-	db.Query(`CREATE person:a SET name = "A", age = 20`, nil)
-	db.Query(`CREATE person:b SET name = "B", age = 30`, nil)
-	db.Query(`CREATE person:c SET name = "C", age = 40`, nil)
+	db.Query(ctx, `CREATE person:a SET name = "A", age = 20`, nil)
+	db.Query(ctx, `CREATE person:b SET name = "B", age = 30`, nil)
+	db.Query(ctx, `CREATE person:c SET name = "C", age = 40`, nil)
 
 	vars := NewObject()
 	vars.InsertInt("min_age", 25)
 	defer vars.Free()
 
-	results, err := db.Query("SELECT * FROM person WHERE age >= $min_age ORDER BY age ASC", vars)
+	results, err := db.Query(ctx, "SELECT * FROM person WHERE age >= $min_age ORDER BY age ASC", vars)
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
@@ -163,13 +166,14 @@ func TestQueryParameterized(t *testing.T) {
 }
 
 func TestQueryMultiStatement(t *testing.T) {
+	ctx := context.Background()
 	db := openTestDB(t)
 	defer db.Close()
 
-	db.Query(`CREATE person:a SET name = "A", age = 20`, nil)
-	db.Query(`CREATE person:b SET name = "B", age = 30`, nil)
+	db.Query(ctx, `CREATE person:a SET name = "A", age = 20`, nil)
+	db.Query(ctx, `CREATE person:b SET name = "B", age = 30`, nil)
 
-	results, err := db.Query(
+	results, err := db.Query(ctx,
 		"SELECT count() AS total FROM person GROUP ALL;"+
 			"SELECT math::mean(age) AS avg_age FROM person GROUP ALL;",
 		nil,
@@ -276,6 +280,7 @@ func TestMarshalObject(t *testing.T) {
 }
 
 func TestMarshalObjectUsedInQuery(t *testing.T) {
+	ctx := context.Background()
 	db := openTestDB(t)
 	defer db.Close()
 
@@ -294,7 +299,7 @@ func TestMarshalObjectUsedInQuery(t *testing.T) {
 	vars.InsertObject("data", data)
 	data.Free()
 
-	results, err := db.Query("CREATE person:eve CONTENT $data", vars)
+	results, err := db.Query(ctx, "CREATE person:eve CONTENT $data", vars)
 	vars.Free()
 	if err != nil {
 		t.Fatalf("CREATE: %v", err)
@@ -304,7 +309,7 @@ func TestMarshalObjectUsedInQuery(t *testing.T) {
 	}
 
 	// Verify
-	results, err = db.Query("SELECT * FROM person:eve", nil)
+	results, err = db.Query(ctx, "SELECT * FROM person:eve", nil)
 	if err != nil {
 		t.Fatalf("SELECT: %v", err)
 	}
@@ -327,10 +332,11 @@ func TestMarshalObjectUsedInQuery(t *testing.T) {
 }
 
 func TestLiveAndKill(t *testing.T) {
+	ctx := context.Background()
 	db := openTestDB(t)
 	defer db.Close()
 
-	lq, err := db.Live("person")
+	lq, err := db.Live(ctx, "person")
 	if err != nil {
 		t.Fatalf("Live: %v", err)
 	}
@@ -338,7 +344,7 @@ func TestLiveAndKill(t *testing.T) {
 	// Write a record from a separate goroutine so the notification arrives.
 	go func() {
 		time.Sleep(50 * time.Millisecond)
-		db.Query(`CREATE person:livetest SET name = "Live"`, nil)
+		db.Query(ctx, `CREATE person:livetest SET name = "Live"`, nil)
 	}()
 
 	select {

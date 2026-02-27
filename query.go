@@ -1,6 +1,9 @@
 package surrealdb
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+)
 
 // Result holds the outcome of a single statement, with values unmarshaled to T.
 type Result[T any] struct {
@@ -27,12 +30,12 @@ func (r *Result[T]) Err() error { return r.err }
 //	    Name string `db:"name"`
 //	    Age  int64  `db:"age"`
 //	}
-//	results, err := surrealdb.Query[Person](db, "SELECT * FROM person", nil)
+//	results, err := surrealdb.Query[Person](ctx, db, "SELECT * FROM person", nil)
 //	for _, p := range results[0].Values() {
 //	    fmt.Println(p.Name, p.Age)
 //	}
-func Query[T any](db *DB, sql string, vars any) ([]Result[T], error) {
-	raw, err := db.Query(sql, vars)
+func Query[T any](ctx context.Context, db *DB, sql string, vars any) ([]Result[T], error) {
+	raw, err := db.Query(ctx, sql, vars)
 	if err != nil {
 		return nil, err
 	}

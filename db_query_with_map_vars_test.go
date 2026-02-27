@@ -1,16 +1,20 @@
 package surrealdb
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestDBQueryWithMapVars(t *testing.T) {
+	ctx := context.Background()
 	db := openTestDB(t)
 	defer db.Close()
 
-	db.Query(`CREATE person:a SET name = "A", age = 20`, nil)
-	db.Query(`CREATE person:b SET name = "B", age = 30`, nil)
-	db.Query(`CREATE person:c SET name = "C", age = 40`, nil)
+	db.Query(ctx, `CREATE person:a SET name = "A", age = 20`, nil)
+	db.Query(ctx, `CREATE person:b SET name = "B", age = 30`, nil)
+	db.Query(ctx, `CREATE person:c SET name = "C", age = 40`, nil)
 
-	results, err := db.Query(
+	results, err := db.Query(ctx,
 		"SELECT * FROM person WHERE age >= $min_age ORDER BY age ASC",
 		map[string]any{"min_age": 25},
 	)
