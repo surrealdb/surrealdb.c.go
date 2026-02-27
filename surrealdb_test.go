@@ -1,6 +1,9 @@
 package surrealdb
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // openTestDB is a helper that opens an in-memory DB with namespace/database set.
 func openTestDB(t *testing.T) *DB {
@@ -320,4 +323,41 @@ func TestMarshalObjectUsedInQuery(t *testing.T) {
 			t.Error("expected active=true")
 		}
 	}
+}
+
+func TestLiveAndKill(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+
+	lq, err := db.Live("person")
+	if err != nil {
+		t.Fatalf("Live: %v", err)
+	}
+
+	// Write a record from a separate goroutine so the notification arrives.
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		db.Query(`CREATE person:livetest SET name = "Live"`, nil)
+	}()
+
+	select {
+	case n, ok := <-lq.Ch:
+		if !ok {
+			t.Fatal("channel closed before receiving notification")
+		}
+		if n.Action != ActionCreate {
+			t.Errorf("expected ActionCreate, got %s", n.Action)
+		}
+		if n.QueryID == "" {
+			t.Error("QueryID is empty")
+		}
+		if n.Data.Tag() != ValueObject {
+			t.Errorf("expected ValueObject, got %s", n.Data.Tag())
+		}
+		t.Logf("notification: action=%s queryID=%s data=%s", n.Action, n.QueryID, n.Data.String())
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for notification")
+	}
+
+	db.Kill(lq)
 }

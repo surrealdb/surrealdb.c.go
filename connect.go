@@ -23,5 +23,5 @@ func Open(endpoint string) (*DB, error) {
 	if err := surrealError(rc, errPtr); err != nil {
 		return nil, err
 	}
-	return &DB{c: surreal}, nil
+	return &DB{c: surreal, live: newLiveQueryMap()}, nil
 }

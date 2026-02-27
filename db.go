@@ -17,7 +17,8 @@ import (
 // It wraps the C sr_surreal_t pointer and is safe to use from multiple goroutines.
 // Call Close when done to release the underlying resources.
 type DB struct {
-	c *C.sr_surreal_t
+	c    *C.sr_surreal_t
+	live *liveQueryMap
 }
 
 // surrealError converts a C return code and error string into a Go error.

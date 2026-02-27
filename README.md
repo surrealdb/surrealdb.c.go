@@ -234,6 +234,26 @@ obj, err := surrealdb.MarshalObject(Person{"Alice", 30, true})
 defer obj.Free()
 ```
 
+### Live queries
+
+```go
+// Start listening for changes on the "person" table
+lq, err := db.Live("person")
+if err != nil {
+    log.Fatal(err)
+}
+
+// Read notifications from the channel
+go func() {
+    for n := range lq.Ch {
+        fmt.Printf("%s: %s\n", n.Action, n.Data.String())
+    }
+}()
+
+// ... later, stop the live query
+db.Kill(lq)
+```
+
 ## Linking strategy
 
 The `#cgo` directive uses `-Wl,-Bstatic -lsurrealdb_c -Wl,-Bdynamic` to force

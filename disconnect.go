@@ -7,6 +7,7 @@ import "C"
 // The DB must not be used after Close is called.
 func (db *DB) Close() {
 	if db.c != nil {
+		db.live.closeAll(db)
 		C.sr_surreal_disconnect(db.c)
 		db.c = nil
 	}
