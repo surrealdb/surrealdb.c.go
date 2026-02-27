@@ -31,7 +31,7 @@ ifeq ($(shell uname -s),Darwin)
   endif
 endif
 
-.PHONY: all build test test/mem test/surrealkv test/rocksdb clean example
+.PHONY: all build test test/mem test/surrealkv test/rocksdb clean example example/basic example/surrealql
 
 all: build
 
@@ -66,9 +66,13 @@ test/surrealkv: $(SURREALDB_C_LIB)
 test/rocksdb: $(SURREALDB_C_LIB)
 	SURREALDB_ENDPOINT=rocksdb:// go test -v -count=1 ./...
 
-example: $(SURREALDB_C_LIB)
-	cd example && go run .
+example: example/basic example/surrealql
+
+example/basic: $(SURREALDB_C_LIB)
+	cd examples/basic && go run .
+
+example/surrealql: $(SURREALDB_C_LIB)
+	cd examples/surrealql && go run .
 
 clean:
 	rm -rf build
-	rm -f example/demo
