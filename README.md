@@ -51,23 +51,7 @@ func main() {
 }
 ```
 
-## Building
+## Documentation
 
-See [docs/build.md](docs/build.md) for how to build surrealdb.c and your app
-that uses surrealdb.c.go (prerequisites, Makefile setup, manual build, macOS
-notes).
-
-## API overview
-
-See [docs/api_overview.md](docs/api_overview.md) for the full API reference
-(connection lifecycle, querying, typed results, live queries, etc.).
-
-## Storage backends
-
-The default build includes `mem://` (in-memory) and `surrealkv://` (file-backed)
-storage backends.  For RocksDB support, see [docs/rocksdb.md](docs/rocksdb.md).
-
-## Internals
-
-See [docs/internals.md](docs/internals.md) to learn about the internals of this
-module (linking strategy, vendored header, etc.).
+See [docs/](docs/README.md) for building, API reference, storage backends, and
+internals.
