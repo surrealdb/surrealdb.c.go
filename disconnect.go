@@ -1,14 +1,10 @@
 package surrealdb
 
-// #include "surrealdb.h"
-import "C"
-
 // Close disconnects from the database and releases all resources.
 // The DB must not be used after Close is called.
 func (db *DB) Close() {
-	if db.c != nil {
-		db.live.closeAll(db)
-		C.sr_surreal_disconnect(db.c)
-		db.c = nil
+	if db.conn != nil {
+		db.conn.Close()
+		db.conn = nil
 	}
 }

@@ -1,4 +1,4 @@
-package surrealdb
+package surrealdbc
 
 import "context"
 

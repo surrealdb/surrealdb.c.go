@@ -35,7 +35,7 @@ func run() error {
 		return fmt.Errorf("Use: %w", err)
 	}
 
-	// CREATE records using Query + MarshalObject
+	// CREATE records using struct vars
 	fmt.Println("[1] Creating records...")
 	people := []struct {
 		id string
@@ -46,17 +46,13 @@ func run() error {
 		{"person:charlie", Person{"Charlie", 35, true}},
 	}
 	for _, entry := range people {
-		vars, err := surrealdb.MarshalObject(entry.p)
-		if err != nil {
-			return fmt.Errorf("MarshalObject: %w", err)
+		type ContentVars struct {
+			Data Person `db:"data"`
 		}
-		outer := wrapData(vars)
 		results, err := db.Query(ctx,
 			fmt.Sprintf("CREATE %s CONTENT $data", entry.id),
-			outer,
+			ContentVars{Data: entry.p},
 		)
-		outer.Free()
-		vars.Free()
 		if err != nil {
 			return fmt.Errorf("CREATE %s: %w", entry.id, err)
 		}
@@ -84,16 +80,13 @@ func run() error {
 	}
 	printResults("", results)
 
-	// Parameterized SELECT
+	// Parameterized SELECT using map vars
 	fmt.Println()
 	fmt.Println("[4] SELECT WHERE age >= $min_age (30)...")
-	vars := surrealdb.NewObject()
-	vars.InsertInt("min_age", 30)
 	results, err = db.Query(ctx,
 		"SELECT * FROM person WHERE age >= $min_age ORDER BY age ASC",
-		vars,
+		map[string]any{"min_age": 30},
 	)
-	vars.Free()
 	if err != nil {
 		return fmt.Errorf("SELECT parameterized: %w", err)
 	}
@@ -124,12 +117,6 @@ func run() error {
 	fmt.Println()
 	fmt.Println("=== Demo complete! ===")
 	return nil
-}
-
-func wrapData(inner *surrealdb.Object) *surrealdb.Object {
-	outer := surrealdb.NewObject()
-	outer.InsertObject("data", inner)
-	return outer
 }
 
 func printResults(prefix string, results []surrealdb.QueryResult) {

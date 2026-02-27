@@ -1,4 +1,4 @@
-package surrealdb
+package surrealdbc
 
 // #include "surrealdb.h"
 import "C"
@@ -55,13 +55,13 @@ func (t ValueTag) String() string {
 // Values are copied out of the C result set — they do not hold C resources.
 type Value struct {
 	tag    ValueTag
-	str    string // for String, Datetime, Decimal
-	num    int64  // for int numbers
+	str    string
+	num    int64
 	float  float64
 	b      bool
-	values []Value  // for Array
-	object []KV     // for Object
-	thing  [2]string // [table, id] for Thing
+	values []Value
+	object []KV
+	thing  [2]string
 }
 
 // KV is a key-value pair within an Object value.
@@ -146,7 +146,6 @@ func (r *QueryResult) Values() []Value { return r.values }
 // Err returns the per-statement error, if any.
 func (r *QueryResult) Err() error { return r.err }
 
-// extractValue copies a C sr_value_t into a Go Value, recursively.
 func extractValue(cv *C.sr_value_t) Value {
 	v := Value{tag: ValueTag(cv.tag)}
 	switch v.tag {
@@ -221,7 +220,6 @@ func extractID(id *C.sr_id_t) string {
 	}
 }
 
-// extractResults converts the C sr_arr_res_t array into a Go slice of QueryResult.
 func extractResults(results *C.sr_arr_res_t, numStatements int) []QueryResult {
 	out := make([]QueryResult, numStatements)
 	for i := 0; i < numStatements; i++ {

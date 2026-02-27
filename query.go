@@ -3,6 +3,8 @@ package surrealdb
 import (
 	"context"
 	"fmt"
+
+	"github.com/surrealdb/surrealdb.c.go/internal/surrealdbc"
 )
 
 // Result holds the outcome of a single statement, with values unmarshaled to T.
@@ -22,7 +24,7 @@ func (r *Result[T]) Err() error { return r.err }
 // T is typically a struct with `db:"..."` tags matching the returned fields.
 // Primitive types (string, int, int64, float64, bool) are also supported.
 //
-// vars follows the same rules as DB.Query (nil, *Object, struct, map[string]any).
+// vars follows the same rules as DB.Query (nil, struct, map[string]any).
 //
 // Example:
 //
@@ -42,13 +44,14 @@ func Query[T any](ctx context.Context, db *DB, sql string, vars any) ([]Result[T
 
 	out := make([]Result[T], len(raw))
 	for i, r := range raw {
-		if r.err != nil {
-			out[i].err = r.err
+		if r.Err() != nil {
+			out[i].err = r.Err()
 			continue
 		}
-		out[i].values = make([]T, len(r.values))
-		for j, v := range r.values {
-			t, err := unmarshalValue[T](v)
+		vals := r.Values()
+		out[i].values = make([]T, len(vals))
+		for j, v := range vals {
+			t, err := surrealdbc.UnmarshalValue[T](v)
 			if err != nil {
 				return nil, fmt.Errorf("statement %d, row %d: %w", i, j, err)
 			}

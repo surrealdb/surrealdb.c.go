@@ -1,26 +1,21 @@
-package surrealdb
+package surrealdbc
 
 import (
 	"fmt"
 	"reflect"
 )
 
-// unmarshalValue converts a Value into a Go value of type T.
+// UnmarshalValue converts a Value into a Go value of type T.
 //
-// For struct T: the Value must be ValueObject. Fields are matched by `db:"..."` tags
-// (same convention as MarshalObject). Unmatched keys are silently ignored.
-//
+// For struct T: the Value must be ValueObject. Fields are matched by `db:"..."` tags.
 // For primitive T (string, bool, int/int64, float64): the Value is extracted directly.
-func unmarshalValue[T any](v Value) (T, error) {
+func UnmarshalValue[T any](v Value) (T, error) {
 	var zero T
 	rt := reflect.TypeOf(zero)
 	if rt == nil {
-		// T is interface{}/any — return the Value as-is won't work,
-		// but this shouldn't happen in practice with typed Query[T] calls.
 		return zero, fmt.Errorf("unmarshal: cannot unmarshal into untyped interface")
 	}
 
-	// Dereference pointer type
 	isPtr := rt.Kind() == reflect.Ptr
 	if isPtr {
 		rt = rt.Elem()
@@ -40,7 +35,6 @@ func unmarshalValue[T any](v Value) (T, error) {
 	return rv.Interface().(T), nil
 }
 
-// setReflectValue sets a reflect.Value from a Value, dispatching by kind.
 func setReflectValue(rv reflect.Value, v Value) error {
 	switch rv.Kind() {
 	case reflect.String:
@@ -50,7 +44,6 @@ func setReflectValue(rv reflect.Value, v Value) error {
 		case ValueThing:
 			rv.SetString(v.thing[0] + ":" + v.thing[1])
 		default:
-			// Fall back to String() for other types
 			rv.SetString(v.String())
 		}
 
@@ -90,12 +83,9 @@ func setReflectValue(rv reflect.Value, v Value) error {
 	return nil
 }
 
-// unmarshalStruct populates a struct reflect.Value from a slice of KV pairs.
-// Uses fieldKey (from struct.go) to match KV keys to struct fields via `db:"..."` tags.
 func unmarshalStruct(rv reflect.Value, kvs []KV) error {
 	rt := rv.Type()
 
-	// Build key → field index map
 	keyToField := make(map[string]int, rt.NumField())
 	for i := 0; i < rt.NumField(); i++ {
 		f := rt.Field(i)
@@ -112,7 +102,7 @@ func unmarshalStruct(rv reflect.Value, kvs []KV) error {
 	for _, kv := range kvs {
 		idx, ok := keyToField[kv.Key]
 		if !ok {
-			continue // ignore unknown keys
+			continue
 		}
 		fv := rv.Field(idx)
 		if err := setReflectValue(fv, kv.Value); err != nil {

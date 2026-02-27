@@ -1,0 +1,74 @@
+package surrealdbc
+
+import "testing"
+
+func TestMarshalObjectFromStruct(t *testing.T) {
+	type Address struct {
+		City  string `db:"city"`
+		State string `db:"state"`
+	}
+	type Person struct {
+		Name    string  `db:"name"`
+		Age     int     `db:"age"`
+		Active  bool    `db:"active"`
+		Score   float64 `db:"score"`
+		Skipped string  `db:"-"`
+		Address Address `db:"address"`
+	}
+
+	obj, err := marshalObject(Person{
+		Name:    "Alice",
+		Age:     30,
+		Active:  true,
+		Score:   9.5,
+		Skipped: "should not appear",
+		Address: Address{City: "NYC", State: "NY"},
+	})
+	if err != nil {
+		t.Fatalf("marshalObject: %v", err)
+	}
+	defer obj.Free()
+
+	if obj.len() != 5 {
+		t.Fatalf("expected 5 keys, got %d", obj.len())
+	}
+
+	keys := obj.keys()
+	keySet := map[string]bool{}
+	for _, k := range keys {
+		keySet[k] = true
+	}
+	for _, exp := range []string{"name", "age", "active", "score", "address"} {
+		if !keySet[exp] {
+			t.Errorf("missing key: %s", exp)
+		}
+	}
+	if keySet["skipped"] || keySet["Skipped"] {
+		t.Error("skipped field should not be present")
+	}
+}
+
+func TestMarshalMapVars(t *testing.T) {
+	obj, err := marshalVars(map[string]any{
+		"name": "test",
+		"age":  42,
+	})
+	if err != nil {
+		t.Fatalf("marshalVars: %v", err)
+	}
+	defer obj.Free()
+
+	if obj.len() != 2 {
+		t.Fatalf("expected 2 keys, got %d", obj.len())
+	}
+}
+
+func TestMarshalVarsNil(t *testing.T) {
+	obj, err := marshalVars(nil)
+	if err != nil {
+		t.Fatalf("marshalVars(nil): %v", err)
+	}
+	if obj != nil {
+		t.Fatal("expected nil object for nil vars")
+	}
+}

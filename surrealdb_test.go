@@ -172,11 +172,10 @@ func TestQueryParameterized(t *testing.T) {
 	db.Query(ctx, `CREATE person:b SET name = "B", age = 30`, nil)
 	db.Query(ctx, `CREATE person:c SET name = "C", age = 40`, nil)
 
-	vars := NewObject()
-	vars.InsertInt("min_age", 25)
-	defer vars.Free()
-
-	results, err := db.Query(ctx, "SELECT * FROM person WHERE age >= $min_age ORDER BY age ASC", vars)
+	results, err := db.Query(ctx,
+		"SELECT * FROM person WHERE age >= $min_age ORDER BY age ASC",
+		map[string]any{"min_age": 25},
+	)
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
@@ -221,86 +220,7 @@ func TestQueryMultiStatement(t *testing.T) {
 	}
 }
 
-func TestObject(t *testing.T) {
-	obj := NewObject()
-	defer obj.Free()
-
-	obj.InsertStr("name", "test")
-	obj.InsertInt("count", 42)
-	obj.InsertFloat("ratio", 3.14)
-	obj.InsertBool("active", true)
-
-	if obj.Len() != 4 {
-		t.Fatalf("expected 4 keys, got %d", obj.Len())
-	}
-
-	keys := obj.Keys()
-	if len(keys) != 4 {
-		t.Fatalf("expected 4 keys, got %d", len(keys))
-	}
-
-	expected := map[string]bool{"name": false, "count": false, "ratio": false, "active": false}
-	for _, k := range keys {
-		if _, ok := expected[k]; !ok {
-			t.Errorf("unexpected key: %s", k)
-		}
-		expected[k] = true
-	}
-	for k, found := range expected {
-		if !found {
-			t.Errorf("missing key: %s", k)
-		}
-	}
-}
-
-func TestMarshalObject(t *testing.T) {
-	type Address struct {
-		City  string `db:"city"`
-		State string `db:"state"`
-	}
-	type Person struct {
-		Name    string  `db:"name"`
-		Age     int     `db:"age"`
-		Active  bool    `db:"active"`
-		Score   float64 `db:"score"`
-		Skipped string  `db:"-"`
-		Address Address `db:"address"`
-	}
-
-	obj, err := MarshalObject(Person{
-		Name:    "Alice",
-		Age:     30,
-		Active:  true,
-		Score:   9.5,
-		Skipped: "should not appear",
-		Address: Address{City: "NYC", State: "NY"},
-	})
-	if err != nil {
-		t.Fatalf("MarshalObject: %v", err)
-	}
-	defer obj.Free()
-
-	// Should have 5 keys (Skipped is excluded)
-	if obj.Len() != 5 {
-		t.Fatalf("expected 5 keys, got %d", obj.Len())
-	}
-
-	keys := obj.Keys()
-	keySet := map[string]bool{}
-	for _, k := range keys {
-		keySet[k] = true
-	}
-	for _, expected := range []string{"name", "age", "active", "score", "address"} {
-		if !keySet[expected] {
-			t.Errorf("missing key: %s", expected)
-		}
-	}
-	if keySet["skipped"] || keySet["Skipped"] {
-		t.Error("skipped field should not be present")
-	}
-}
-
-func TestMarshalObjectUsedInQuery(t *testing.T) {
+func TestStructVarsUsedInQuery(t *testing.T) {
 	ctx := context.Background()
 	db := openTestDB(t)
 	defer db.Close()
@@ -311,17 +231,13 @@ func TestMarshalObjectUsedInQuery(t *testing.T) {
 		Active bool   `db:"active"`
 	}
 
-	data, err := MarshalObject(Person{"Eve", 22, true})
-	if err != nil {
-		t.Fatalf("MarshalObject: %v", err)
+	type Vars struct {
+		Data Person `db:"data"`
 	}
 
-	vars := NewObject()
-	vars.InsertObject("data", data)
-	data.Free()
-
-	results, err := db.Query(ctx, "CREATE person:eve CONTENT $data", vars)
-	vars.Free()
+	results, err := db.Query(ctx, "CREATE person:eve CONTENT $data",
+		Vars{Data: Person{"Eve", 22, true}},
+	)
 	if err != nil {
 		t.Fatalf("CREATE: %v", err)
 	}
