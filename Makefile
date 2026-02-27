@@ -54,7 +54,7 @@ $(SURREALDB_C_DIR)/Cargo.toml:
 	git clone --depth 1 --branch $(SURREALDB_C_REF) $(SURREALDB_C_REPO) $(SURREALDB_C_DIR)
 
 $(SURREALDB_C_LIB): $(SURREALDB_C_DIR)/Cargo.toml
-	cd $(SURREALDB_C_DIR) && cargo build --release
+	cd $(SURREALDB_C_DIR) && cargo build --release || { $(CURDIR)/scripts/diagnose-build.sh; exit 1; }
 	cp $(SURREALDB_C_INCLUDE)/surrealdb.h surrealdb.h
 
 # Patch Cargo.toml to add optional feature forwarding (idempotent).
@@ -76,7 +76,7 @@ $(SURREALDB_C_DIR)/.features-patched: $(SURREALDB_C_DIR)/Cargo.toml
 	@test -f $(SURREALDB_C_LIB) && touch $(SURREALDB_C_LIB) || true
 
 $(SURREALDB_C_ROCKSDB_LIB): $(SURREALDB_C_DIR)/.features-patched
-	cd $(SURREALDB_C_DIR) && cargo build --release --features kv-rocksdb --target-dir target-rocksdb
+	cd $(SURREALDB_C_DIR) && cargo build --release --features kv-rocksdb --target-dir target-rocksdb || { $(CURDIR)/scripts/diagnose-build.sh; exit 1; }
 	cp $(SURREALDB_C_INCLUDE)/surrealdb.h surrealdb.h
 
 # ---------------------------------------------------------------------------
