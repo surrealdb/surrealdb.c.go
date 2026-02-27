@@ -4,6 +4,17 @@ Go bindings for embedded SurrealDB via the [surrealdb.c](https://github.com/surr
 
 ## Quick start
 
+1. [Build surrealdb.c and set up CGO](docs/build.md) (or just run `make build`)
+2. `go get github.com/surrealdb/surrealdb.c.go`
+3. Write code:
+
+> **New to CGO?** This module links against a C static library (`libsurrealdb_c.a`)
+> at compile time. You must build surrealdb.c **and** set `CGO_LDFLAGS` to its
+> location before `go build` or `go test` will work. Without this, the Go linker
+> cannot find the SurrealDB symbols and the build will fail. See
+> [docs/build.md](docs/build.md) for step-by-step instructions — or use the
+> provided Makefile which handles everything automatically (`make build`).
+
 ```go
 package main
 
