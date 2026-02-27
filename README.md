@@ -331,6 +331,11 @@ go func() {
 db.Kill(lq)
 ```
 
+## Storage backends
+
+The default build includes `mem://` (in-memory) and `surrealkv://` (file-backed)
+storage backends.  For RocksDB support, see [docs/rocksdb.md](docs/rocksdb.md).
+
 ## Linking strategy
 
 The `#cgo` directives statically link `libsurrealdb_c.a` while keeping system
