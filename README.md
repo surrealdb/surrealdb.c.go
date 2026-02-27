@@ -2,6 +2,9 @@
 
 Go bindings for embedded SurrealDB via the [surrealdb.c](https://github.com/surrealdb/surrealdb.c) C FFI library.
 
+> **Compatibility:** Currently tested with **SurrealDB 2.4.1** (the surrealdb.c
+> library is locked to this version). Support for v3 is coming soon.
+
 ## Quick start
 
 1. [Build surrealdb.c and set up CGO](docs/build.md) (or just run `make build`)
