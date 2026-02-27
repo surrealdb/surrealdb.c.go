@@ -1,6 +1,7 @@
 package surrealdb
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -8,7 +9,7 @@ import (
 // openTestDB is a helper that opens an in-memory DB with namespace/database set.
 func openTestDB(t *testing.T) *DB {
 	t.Helper()
-	db, err := Open("mem://")
+	db, err := Open(context.Background(), "mem://")
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -20,7 +21,7 @@ func openTestDB(t *testing.T) *DB {
 }
 
 func TestOpenClose(t *testing.T) {
-	db, err := Open("mem://")
+	db, err := Open(context.Background(), "mem://")
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -30,7 +31,7 @@ func TestOpenClose(t *testing.T) {
 }
 
 func TestVersion(t *testing.T) {
-	db, err := Open("mem://")
+	db, err := Open(context.Background(), "mem://")
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -47,7 +48,7 @@ func TestVersion(t *testing.T) {
 }
 
 func TestHealth(t *testing.T) {
-	db, err := Open("mem://")
+	db, err := Open(context.Background(), "mem://")
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -59,7 +60,7 @@ func TestHealth(t *testing.T) {
 }
 
 func TestUse(t *testing.T) {
-	db, err := Open("mem://")
+	db, err := Open(context.Background(), "mem://")
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

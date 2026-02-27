@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 
@@ -19,7 +20,7 @@ func main() {
 	fmt.Println()
 
 	// 1. Open an in-memory embedded database
-	db, err := surrealdb.Open("mem://")
+	db, err := surrealdb.Open(context.Background(), "mem://")
 	if err != nil {
 		log.Fatalf("Open: %v", err)
 	}
