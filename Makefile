@@ -43,7 +43,7 @@ endif
 GOLANGCI_LINT_VERSION ?= v2.10.1
 GOLANGCI_LINT         = $(CURDIR)/bin/golangci-lint
 
-.PHONY: all build test test/mem test/surrealkv test/rocksdb clean example example/basic example/surrealql lint lint/install
+.PHONY: all build test test/mem test/surrealkv test/rocksdb test/example test/example/basic test/example/surrealql clean example example/basic example/surrealql lint lint/install
 
 all: build
 
@@ -89,18 +89,24 @@ $(SURREALDB_C_ROCKSDB_LIB): $(SURREALDB_C_DIR)/.features-patched
 build: $(SURREALDB_C_LIB)
 	go build ./...
 
-test: test/mem test/surrealkv
+test: test/mem test/surrealkv test/example
 
 test/mem: $(SURREALDB_C_LIB)
 	SURREALDB_ENDPOINT=mem:// go test -v -count=1 ./...
-	cd examples/basic && go test -v -count=1 ./...
-	cd examples/surrealql && go test -v -count=1 ./...
 
 test/surrealkv: $(SURREALDB_C_LIB)
 	SURREALDB_ENDPOINT=surrealkv:// go test -v -count=1 ./...
 
 test/rocksdb: $(SURREALDB_C_ROCKSDB_LIB)
 	CGO_LDFLAGS="-L$(CURDIR)/$(SURREALDB_C_ROCKSDB_LIBDIR)" SURREALDB_ENDPOINT=rocksdb:// go test -v -count=1 ./...
+
+test/example: test/example/basic test/example/surrealql
+
+test/example/basic: $(SURREALDB_C_LIB)
+	cd examples/basic && go build ./... && go test -v -count=1 ./...
+
+test/example/surrealql: $(SURREALDB_C_LIB)
+	cd examples/surrealql && go build ./... && go test -v -count=1 ./...
 
 example: example/basic example/surrealql
 
