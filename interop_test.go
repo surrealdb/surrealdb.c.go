@@ -19,6 +19,25 @@ type InteropNested struct {
 	Ok  bool   `cbor:"ok"`
 }
 
+// InteropObj is a typed nested object that exercises all supported Go
+// numeric types plus other value types in a single SurrealDB object.
+// unmarshalAny coerces both drivers' raw representations (C: int64,
+// Go CBOR: uint64 for positive ints) into the target field types,
+// so this struct verifies that coercion works for every kind.
+type InteropObj struct {
+	I64  int64         `cbor:"i64"`
+	I32  int32         `cbor:"i32"`
+	I16  int16         `cbor:"i16"`
+	U64  uint64        `cbor:"u64"`
+	U32  uint32        `cbor:"u32"`
+	U16  uint16        `cbor:"u16"`
+	F64  float64       `cbor:"f64"`
+	F32  float32       `cbor:"f32"`
+	B    bool          `cbor:"b"`
+	S    string        `cbor:"s"`
+	Dur  time.Duration `cbor:"dur"`
+}
+
 // InteropRecord covers the SurrealDB data types that both the CGo and
 // pure-Go drivers can round-trip identically through Query[T].
 //
@@ -50,6 +69,8 @@ type InteropRecord struct {
 	DecNeg   surrealdb.Decimal          `cbor:"dec_neg"`
 	UuidVal  surrealdb.UUID             `cbor:"uuid_val"`
 	Point    surrealdb.GeometryPoint   `cbor:"point_val"`
+	ObjMap   map[string]string        `cbor:"obj_map"`
+	ObjTyped InteropObj              `cbor:"obj_typed"`
 }
 
 // interopCreateSQL populates the record using SurrealQL type-cast functions.
@@ -82,7 +103,21 @@ CREATE interop:test SET
     dec_val   = <decimal> 99.99,
     dec_neg   = <decimal> -0.001,
     uuid_val  = <uuid> "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
-    point_val = type::point([1.5, 2.5])
+    point_val = type::point([1.5, 2.5]),
+    obj_map   = { x: type::string("one"), y: type::string("two"), z: type::string("three") },
+    obj_typed = {
+        i64: type::int("9007199254740992"),
+        i32: type::int("2147483647"),
+        i16: type::int("32767"),
+        u64: type::int("9007199254740992"),
+        u32: type::int("2147483647"),
+        u16: type::int("32767"),
+        f64: type::float("2.718281828"),
+        f32: type::float("1.5"),
+        b:   type::bool("true"),
+        s:   type::string("mixed"),
+        dur: type::duration("2h45m")
+    }
 `
 
 // interopCreateContent populates the record using Go struct vars via CONTENT.
@@ -121,6 +156,20 @@ func interopContentVars() map[string]any {
 			"dec_neg":  "-0.001",
 			"uuid_val":  "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
 			"point_val": surrealdb.GeometryPoint{Longitude: 1.5, Latitude: 2.5},
+			"obj_map": map[string]string{"x": "one", "y": "two", "z": "three"},
+			"obj_typed": map[string]any{
+				"i64": int64(9007199254740992),
+				"i32": int64(2147483647),
+				"i16": int64(32767),
+				"u64": int64(9007199254740992),
+				"u32": int64(2147483647),
+				"u16": int64(32767),
+				"f64": 2.718281828,
+				"f32": 1.5,
+				"b":   true,
+				"s":   "mixed",
+				"dur": 2*time.Hour + 45*time.Minute,
+			},
 		},
 	}
 }
@@ -152,6 +201,8 @@ type InteropContent struct {
 	DecNeg   surrealdb.Decimal          `cbor:"dec_neg"`
 	UuidVal  surrealdb.UUID             `cbor:"uuid_val"`
 	Point    surrealdb.GeometryPoint   `cbor:"point_val"`
+	ObjMap   map[string]string        `cbor:"obj_map"`
+	ObjTyped InteropObj              `cbor:"obj_typed"`
 }
 
 // interopContentStruct returns an InteropContent struct wrapped for the
@@ -184,6 +235,20 @@ func interopContentStruct() map[string]any {
 			DecNeg:   "-0.001",
 			UuidVal:  "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
 			Point:    surrealdb.GeometryPoint{Longitude: 1.5, Latitude: 2.5},
+			ObjMap: map[string]string{"x": "one", "y": "two", "z": "three"},
+			ObjTyped: InteropObj{
+				I64: 9007199254740992,
+				I32: 2147483647,
+				I16: 32767,
+				U64: 9007199254740992,
+				U32: 2147483647,
+				U16: 32767,
+				F64: 2.718281828,
+				F32: 1.5,
+				B:   true,
+				S:   "mixed",
+				Dur: 2*time.Hour + 45*time.Minute,
+			},
 		},
 	}
 }
