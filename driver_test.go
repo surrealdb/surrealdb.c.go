@@ -102,18 +102,91 @@ func testDriverQuery(t *testing.T, endpoint string) {
 	_, err = db.Query(ctx, `CREATE person:alice SET name = "Alice", age = 30`, nil)
 	require.NoError(t, err)
 
-	type Person struct {
+	// Test with string ID (auto-converted from RecordID)
+	type PersonStr struct {
 		ID   string `cbor:"id"`
 		Name string `cbor:"name"`
 		Age  int64  `cbor:"age"`
 	}
 
-	results, err := surrealdb.Query[Person](ctx, db, "SELECT * FROM person", nil)
+	results, err := surrealdb.Query[PersonStr](ctx, db, "SELECT * FROM person", nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.NoError(t, results[0].Err())
 
 	got := results[0].Values()
 	require.Len(t, got, 1)
-	assert.Equal(t, Person{ID: "person:alice", Name: "Alice", Age: 30}, got[0])
+	assert.Equal(t, PersonStr{ID: "person:alice", Name: "Alice", Age: 30}, got[0])
+
+	// Test with RecordID[string] field
+	type PersonRID struct {
+		ID   surrealdb.RecordID[string] `cbor:"id"`
+		Name string                     `cbor:"name"`
+		Age  int64                      `cbor:"age"`
+	}
+
+	ridResults, err := surrealdb.Query[PersonRID](ctx, db, "SELECT * FROM person", nil)
+	require.NoError(t, err)
+	require.Len(t, ridResults, 1)
+	require.NoError(t, ridResults[0].Err())
+
+	ridGot := ridResults[0].Values()
+	require.Len(t, ridGot, 1)
+	assert.Equal(t, "person", ridGot[0].ID.Table)
+	assert.Equal(t, "alice", ridGot[0].ID.ID)
+	assert.Equal(t, "Alice", ridGot[0].Name)
+
+	// Test RecordID[string] round-trip: pass as var, get it back
+	rid := surrealdb.NewRecordID("person", "alice")
+	selectResults, err := db.Query(ctx, "SELECT * FROM $rid", map[string]any{"rid": rid})
+	require.NoError(t, err)
+	require.Len(t, selectResults, 1)
+	require.NoError(t, selectResults[0].Err)
+
+	rows, ok := selectResults[0].Value.([]any)
+	require.True(t, ok, "expected []any, got %T", selectResults[0].Value)
+	require.Len(t, rows, 1)
+
+	rec, ok := rows[0].(map[string]any)
+	require.True(t, ok, "expected map[string]any, got %T", rows[0])
+	gotRID, ok := rec["id"].(surrealdb.RecordID[any])
+	require.True(t, ok, "expected RecordID[any] for id field, got %T", rec["id"])
+	assert.Equal(t, "person", gotRID.Table)
+	assert.Equal(t, "alice", fmt.Sprintf("%v", gotRID.ID))
+
+	// Test with RecordID[int]: numeric record IDs
+	_, err = db.Query(ctx, `CREATE person:123 SET name = "Numeric", age = 99`, nil)
+	require.NoError(t, err)
+
+	type PersonIntID struct {
+		ID   surrealdb.RecordID[int] `cbor:"id"`
+		Name string                  `cbor:"name"`
+		Age  int64                   `cbor:"age"`
+	}
+
+	intResults, err := surrealdb.Query[PersonIntID](ctx, db, "SELECT * FROM person:123", nil)
+	require.NoError(t, err)
+	require.Len(t, intResults, 1)
+	require.NoError(t, intResults[0].Err())
+
+	intGot := intResults[0].Values()
+	require.Len(t, intGot, 1)
+	assert.Equal(t, "person", intGot[0].ID.Table)
+	assert.Equal(t, 123, intGot[0].ID.ID)
+	assert.Equal(t, "Numeric", intGot[0].Name)
+
+	// Test RecordID[int] round-trip: pass as var, get it back
+	intRID := surrealdb.NewRecordID("person", 123)
+	intSelectResults, err := db.Query(ctx, "SELECT * FROM $rid", map[string]any{"rid": intRID})
+	require.NoError(t, err)
+	require.Len(t, intSelectResults, 1)
+	require.NoError(t, intSelectResults[0].Err)
+
+	intRows, ok := intSelectResults[0].Value.([]any)
+	require.True(t, ok, "expected []any, got %T", intSelectResults[0].Value)
+	require.Len(t, intRows, 1)
+
+	intRec, ok := intRows[0].(map[string]any)
+	require.True(t, ok, "expected map[string]any, got %T", intRows[0])
+	assert.Equal(t, "Numeric", intRec["name"])
 }

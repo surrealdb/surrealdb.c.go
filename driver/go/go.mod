@@ -1,6 +1,6 @@
 module github.com/surrealdb/surrealdb.c.go/driver/go
 
-go 1.23
+go 1.24
 
 require (
 	github.com/surrealdb/surrealdb.c.go v0.0.0

@@ -3,7 +3,10 @@ package surrealdb
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
+
+	"github.com/surrealdb/surrealdb.c.go/driver"
 )
 
 // unmarshalAny converts a plain Go value (map[string]any, primitives) into T.
@@ -37,6 +40,11 @@ func setFromAny(rv reflect.Value, src any) error {
 	if src == nil {
 		rv.Set(reflect.Zero(rv.Type()))
 		return nil
+	}
+
+	srcRV := reflect.ValueOf(src)
+	if srcRV.Kind() == reflect.Struct && driver.IsRecordIDType(srcRV.Type()) {
+		return setRecordIDTarget(rv, srcRV)
 	}
 
 	switch rv.Kind() {
@@ -76,6 +84,9 @@ func setFromAny(rv reflect.Value, src any) error {
 		rv.SetFloat(f)
 
 	case reflect.Struct:
+		if driver.IsRecordIDType(rv.Type()) {
+			return fmt.Errorf("unmarshal: expected driver.RecordID source for RecordID target, got %T", src)
+		}
 		m, ok := src.(map[string]any)
 		if !ok {
 			return fmt.Errorf("unmarshal: expected map[string]any for struct, got %T", src)
@@ -145,6 +156,68 @@ func unmarshalStructFromMap(rv reflect.Value, m map[string]any) error {
 		}
 	}
 	return nil
+}
+
+// setRecordIDTarget handles assigning a source RecordID[T] (accessed via
+// reflection) to a target reflect.Value, which may be a string,
+// another RecordID[U], or an interface{}.
+func setRecordIDTarget(rv reflect.Value, srcRID reflect.Value) error {
+	table := srcRID.Field(0).String()
+	rawID := srcRID.Field(1).Interface()
+
+	switch rv.Kind() {
+	case reflect.String:
+		rv.SetString(fmt.Sprintf("%s:%v", table, rawID))
+		return nil
+	case reflect.Struct:
+		if driver.IsRecordIDType(rv.Type()) {
+			rv.Field(0).SetString(table)
+			if err := setFromAny(rv.Field(1), rawID); err != nil {
+				return setIDFromNumericString(rv.Field(1), rawID, err)
+			}
+			return nil
+		}
+		return fmt.Errorf("unmarshal: cannot assign RecordID to struct %s", rv.Type())
+	case reflect.Interface:
+		rv.Set(srcRID)
+		return nil
+	default:
+		return fmt.Errorf("unmarshal: cannot assign RecordID to %s", rv.Kind())
+	}
+}
+
+// setIDFromNumericString is a fallback for when the C backend returns
+// numeric record IDs as strings (e.g. "123" instead of int64(123)).
+func setIDFromNumericString(rv reflect.Value, rawID any, origErr error) error {
+	s, ok := rawID.(string)
+	if !ok {
+		return origErr
+	}
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		n, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return origErr
+		}
+		rv.SetInt(n)
+		return nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		n, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			return origErr
+		}
+		rv.SetUint(n)
+		return nil
+	case reflect.Float32, reflect.Float64:
+		f, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return origErr
+		}
+		rv.SetFloat(f)
+		return nil
+	default:
+		return origErr
+	}
 }
 
 func cborFieldKey(f reflect.StructField) string {

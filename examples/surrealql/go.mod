@@ -1,6 +1,6 @@
 module github.com/surrealdb/surrealdb.c.go/examples/surrealql
 
-go 1.23
+go 1.24
 
 replace (
 	github.com/surrealdb/surrealdb.c.go => ../../

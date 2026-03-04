@@ -82,10 +82,20 @@ func toMapVars(vars any) (map[string]any, error) {
 	if vars == nil {
 		return nil, nil
 	}
-	if m, ok := vars.(map[string]any); ok {
-		return m, nil
+	var m map[string]any
+	if raw, ok := vars.(map[string]any); ok {
+		m = raw
+	} else {
+		var err error
+		m, err = structToMap(vars)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return structToMap(vars)
+	for k, v := range m {
+		m[k] = denormalizeValue(v)
+	}
+	return m, nil
 }
 
 func structToMap(v any) (map[string]any, error) {
@@ -127,6 +137,9 @@ func cborFieldKey(f reflect.StructField) string {
 func fieldToAny(fv reflect.Value) any {
 	switch fv.Kind() {
 	case reflect.Struct:
+		if driver.IsRecordIDType(fv.Type()) {
+			return models.NewRecordID(fv.Field(0).String(), fv.Field(1).Interface())
+		}
 		rt := fv.Type()
 		m := make(map[string]any, rt.NumField())
 		for i := 0; i < rt.NumField(); i++ {
@@ -156,12 +169,12 @@ func fieldToAny(fv reflect.Value) any {
 func normalizeValue(v any) any {
 	switch val := v.(type) {
 	case models.RecordID:
-		return fmt.Sprintf("%s:%v", val.Table, val.ID)
+		return driver.RecordID[any]{Table: val.Table, ID: val.ID}
 	case *models.RecordID:
 		if val == nil {
 			return nil
 		}
-		return fmt.Sprintf("%s:%v", val.Table, val.ID)
+		return driver.RecordID[any]{Table: val.Table, ID: val.ID}
 	case models.Table:
 		return string(val)
 	case []any:
@@ -177,6 +190,31 @@ func normalizeValue(v any) any {
 		}
 		return out
 	default:
+		return v
+	}
+}
+
+func denormalizeValue(v any) any {
+	switch val := v.(type) {
+	case driver.RecordID[any]:
+		return models.NewRecordID(val.Table, val.ID)
+	case map[string]any:
+		out := make(map[string]any, len(val))
+		for k, elem := range val {
+			out[k] = denormalizeValue(elem)
+		}
+		return out
+	case []any:
+		out := make([]any, len(val))
+		for i, elem := range val {
+			out[i] = denormalizeValue(elem)
+		}
+		return out
+	default:
+		rv := reflect.ValueOf(v)
+		if rv.Kind() == reflect.Struct && driver.IsRecordIDType(rv.Type()) {
+			return models.NewRecordID(rv.Field(0).String(), rv.Field(1).Interface())
+		}
 		return v
 	}
 }

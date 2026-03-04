@@ -23,5 +23,8 @@ func Example() {
 	//     Bob (age=25, active=false)
 	//     Charlie (age=35, active=true)
 	//
+	// [4] RecordID round-trip...
+	//     Queried by RecordID: person:alice (table=person, id=alice, name=Alice)
+	//
 	// === Demo complete! ===
 }

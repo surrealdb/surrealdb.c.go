@@ -14,6 +14,13 @@ type Person struct {
 	Active bool   `cbor:"active"`
 }
 
+type PersonWithID struct {
+	ID     surrealdb.RecordID[string] `cbor:"id"`
+	Name   string                     `cbor:"name"`
+	Age    int                        `cbor:"age"`
+	Active bool                       `cbor:"active"`
+}
+
 func main() {
 	if err := run(); err != nil {
 		log.Fatal(err)
@@ -78,6 +85,17 @@ func run() error {
 	for _, p := range typed[0].Values() {
 		fmt.Printf("    %s (age=%d, active=%v)\n", p.Name, p.Age, p.Active)
 	}
+
+	// RecordID round-trip: use RecordID in query vars, get structured RecordID back
+	fmt.Println()
+	fmt.Println("[4] RecordID round-trip...")
+	rid := surrealdb.NewRecordID("person", "alice")
+	ridResults, err := surrealdb.Query[PersonWithID](ctx, db, "SELECT * FROM $rid", map[string]any{"rid": rid})
+	if err != nil {
+		return fmt.Errorf("Query with RecordID var: %w", err)
+	}
+	p := ridResults[0].Values()[0]
+	fmt.Printf("    Queried by RecordID: %s (table=%s, id=%v, name=%s)\n", p.ID, p.ID.Table, p.ID.ID, p.Name)
 
 	fmt.Println()
 	fmt.Println("=== Demo complete! ===")

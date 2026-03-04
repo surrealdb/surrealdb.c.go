@@ -139,9 +139,25 @@ func Run() error {
 	}
 	printResults(results)
 
-	// 7. DELETE a record
+	// 7. RecordID round-trip: pass RecordID as a variable, get it back
 	fmt.Println()
-	fmt.Println("[7] DELETE person:diana ...")
+	fmt.Println("[7] RecordID round-trip via query var ...")
+
+	rid := surrealdb.NewRecordID("person", "alice")
+	results, err = db.Query(ctx, "SELECT * FROM $rid", map[string]any{"rid": rid})
+	if err != nil {
+		return fmt.Errorf("SELECT by RecordID: %w", err)
+	}
+	if rows, ok := results[0].Value.([]any); ok && len(rows) > 0 {
+		if rec, ok := rows[0].(map[string]any); ok {
+			gotID := rec["id"].(surrealdb.RecordID[any])
+			fmt.Printf("    Passed: %s -> Got back: table=%s id=%v name=%v\n", rid, gotID.Table, gotID.ID, rec["name"])
+		}
+	}
+
+	// 8. DELETE a record
+	fmt.Println()
+	fmt.Println("[8] DELETE person:diana ...")
 
 	dq := surrealql.Delete("person:diana")
 	sql, vars = dq.Build()
@@ -156,9 +172,9 @@ func Run() error {
 		fmt.Println("    Deleted")
 	}
 
-	// 8. Final state
+	// 9. Final state
 	fmt.Println()
-	fmt.Println("[8] Final state ...")
+	fmt.Println("[9] Final state ...")
 
 	q = surrealql.Select("person").OrderBy("name")
 	sql, vars = q.Build()

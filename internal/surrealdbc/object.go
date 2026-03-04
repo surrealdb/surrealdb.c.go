@@ -49,6 +49,18 @@ func (o *object) insertBool(key string, value bool) {
 	freeCString(cKey)
 }
 
+func (o *object) insertThing(key, table, id string) {
+	cKey := cstring(key)
+	cTable := cstring(table)
+	cID := cstring(id)
+	cVal := C.sr_value_thing(cTable, cID)
+	C.sr_object_insert(&o.c, cKey, cVal)
+	C.sr_value_free(cVal)
+	freeCString(cKey)
+	freeCString(cTable)
+	freeCString(cID)
+}
+
 func (o *object) insertObject(key string, nested *object) {
 	cKey := cstring(key)
 	cVal := C.sr_value_object(&nested.c)

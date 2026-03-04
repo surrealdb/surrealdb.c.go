@@ -12,6 +12,12 @@ import (
 type Driver = driver.Driver
 type QueryResult = driver.QueryResult
 type Notification = driver.Notification
+type RecordID[T any] = driver.RecordID[T]
+
+// NewRecordID creates a RecordID from a table name and an identifier.
+func NewRecordID[T any](table string, id T) RecordID[T] {
+	return driver.NewRecordID(table, id)
+}
 
 // ErrNotSupported is re-exported from the driver package.
 var ErrNotSupported = driver.ErrNotSupported

@@ -42,11 +42,14 @@ func ExampleRun() {
 	//     SurrealQL: SELECT count() FROM person GROUP ALL
 	//     [0] map[count:4]
 	//
-	// [7] DELETE person:diana ...
+	// [7] RecordID round-trip via query var ...
+	//     Passed: person:alice -> Got back: table=person id=alice name=Alice
+	//
+	// [8] DELETE person:diana ...
 	//     SurrealQL: DELETE person:diana
 	//     Deleted (statement returned 0 results)
 	//
-	// [8] Final state ...
+	// [9] Final state ...
 	//     [0] map[age:30 email:alice@example.com id:person:alice name:Alice]
 	//     [1] map[age:26 email:bob.new@example.com id:person:bob name:Bob]
 	//     [2] map[age:35 email:charlie@example.com id:person:charlie name:Charlie]

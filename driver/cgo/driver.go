@@ -4,7 +4,6 @@ package cgo
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/surrealdb/surrealdb.c.go/driver"
 	"github.com/surrealdb/surrealdb.c.go/internal/surrealdbc"
@@ -104,7 +103,7 @@ func valueToAny(v *surrealdbc.Value) any {
 	case surrealdbc.ValueDatetime:
 		return v.AsString()
 	case surrealdbc.ValueThing:
-		return fmt.Sprintf("%s:%s", v.AsThingTable(), v.AsThingID())
+		return driver.RecordID[any]{Table: v.AsThingTable(), ID: v.AsThingID()}
 	case surrealdbc.ValueArray:
 		arr := v.AsArray()
 		out := make([]any, len(arr))

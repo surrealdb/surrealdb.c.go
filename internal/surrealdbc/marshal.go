@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+
+	"github.com/surrealdb/surrealdb.c.go/driver"
 )
 
 func marshalVars(v any) (*object, error) {
@@ -64,6 +66,16 @@ func fieldKey(f reflect.StructField) string {
 }
 
 func insertValue(obj *object, key string, fv reflect.Value) error {
+	if fv.Kind() == reflect.Interface && !fv.IsNil() {
+		fv = fv.Elem()
+	}
+	if fv.Kind() == reflect.Struct && driver.IsRecordIDType(fv.Type()) {
+		table := fv.Field(0).String()
+		id := fmt.Sprintf("%v", fv.Field(1).Interface())
+		obj.insertThing(key, table, id)
+		return nil
+	}
+
 	switch fv.Kind() {
 	case reflect.String:
 		obj.insertStr(key, fv.String())
