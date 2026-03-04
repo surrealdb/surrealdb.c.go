@@ -168,6 +168,13 @@ func fieldToAny(fv reflect.Value) any {
 
 func normalizeValue(v any) any {
 	switch val := v.(type) {
+	case models.CustomDuration:
+		return val.Duration
+	case *models.CustomDuration:
+		if val == nil {
+			return nil
+		}
+		return val.Duration
 	case models.RecordID:
 		return driver.RecordID[any]{Table: val.Table, ID: val.ID}
 	case *models.RecordID:

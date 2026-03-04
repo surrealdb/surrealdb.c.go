@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,7 +24,6 @@ type InteropNested struct {
 //
 // Excluded types (drivers produce different raw Go types):
 //   - datetime  — C driver returns string, Go SDK returns time.Time
-//   - duration  — C driver returns tag name, Go SDK returns custom type
 //   - uuid      — C driver returns tag name, Go SDK returns UUID type
 //   - bytes     — C driver returns tag name, Go SDK returns []byte
 //   - geometry  — C driver returns tag name, Go SDK returns custom type
@@ -47,6 +47,8 @@ type InteropRecord struct {
 	ArrEmpty []int64                    `cbor:"arr_empty"`
 	Nested   InteropNested              `cbor:"nested"`
 	RID      surrealdb.RecordID[string] `cbor:"rid_val"`
+	DurVal   time.Duration              `cbor:"dur_val"`
+	DurZero  time.Duration              `cbor:"dur_zero"`
 }
 
 const interopCreateSQL = `
@@ -71,7 +73,9 @@ CREATE interop:test SET
         num: type::int("99"),
         ok:  type::bool("true")
     },
-    rid_val   = type::thing("person", "alice")
+    rid_val   = type::thing("person", "alice"),
+    dur_val   = type::duration("1h30m10s"),
+    dur_zero  = type::duration("0s")
 `
 
 func TestInteropTypes(t *testing.T) {

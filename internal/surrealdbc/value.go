@@ -6,6 +6,7 @@ import "C"
 import (
 	"errors"
 	"fmt"
+	"time"
 	"unsafe"
 )
 
@@ -59,6 +60,7 @@ type Value struct {
 	num    int64
 	float  float64
 	b      bool
+	dur    time.Duration
 	values []Value
 	object []KV
 	thing  [2]string
@@ -91,6 +93,9 @@ func (v *Value) AsArray() []Value { return v.values }
 // AsObject returns key-value pairs for an Object value.
 func (v *Value) AsObject() []KV { return v.object }
 
+// AsDuration returns the duration value.
+func (v *Value) AsDuration() time.Duration { return v.dur }
+
 // AsThingTable returns the table name for a Thing (record ID) value.
 func (v *Value) AsThingTable() string { return v.thing[0] }
 
@@ -114,6 +119,8 @@ func (v *Value) String() string {
 			return fmt.Sprintf("%d", v.num)
 		}
 		return fmt.Sprintf("%g", v.float)
+	case ValueDuration:
+		return v.dur.String()
 	case ValueString:
 		return v.str
 	case ValueDatetime:
@@ -151,6 +158,9 @@ func extractValue(cv *C.sr_value_t) Value {
 		extractNumber(&v, (*C.sr_number_t)(unsafe.Pointer(&cv.anon0)))
 	case ValueString:
 		v.str = C.GoString(*(*C.sr_string_t)(unsafe.Pointer(&cv.anon0)))
+	case ValueDuration:
+		d := (*C.sr_duration_t)(unsafe.Pointer(&cv.anon0))
+		v.dur = time.Duration(d.secs)*time.Second + time.Duration(d.nanos)*time.Nanosecond
 	case ValueDatetime:
 		v.str = C.GoString(*(*C.sr_string_t)(unsafe.Pointer(&cv.anon0)))
 	case ValueArray:
@@ -171,7 +181,7 @@ func extractValue(cv *C.sr_value_t) Value {
 		v.thing[0] = C.GoString(thing.table)
 		v.thing[1] = extractID(&thing.id)
 	default:
-		// For types we don't fully extract (UUID, Bytes, Geometry, Duration),
+		// For types we don't fully extract (UUID, Bytes, Geometry),
 		// the tag is set but data access requires specialized methods.
 	}
 	return v

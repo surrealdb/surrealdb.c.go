@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/surrealdb/surrealdb.c.go/driver"
 )
@@ -233,6 +234,8 @@ func cborFieldKey(f reflect.StructField) string {
 
 func toInt64Any(v any) (int64, error) {
 	switch n := v.(type) {
+	case time.Duration:
+		return int64(n), nil
 	case int:
 		return int64(n), nil
 	case int8:
