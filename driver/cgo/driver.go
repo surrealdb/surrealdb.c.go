@@ -101,6 +101,8 @@ func valueToAny(v *surrealdbc.Value) any {
 		return int64(0)
 	case surrealdbc.ValueString:
 		return v.AsString()
+	case surrealdbc.ValueUUID:
+		return v.AsUUID()
 	case surrealdbc.ValueDuration:
 		return v.AsDuration()
 	case surrealdbc.ValueDatetime:

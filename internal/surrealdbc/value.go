@@ -96,6 +96,9 @@ func (v *Value) AsObject() []KV { return v.object }
 // AsDuration returns the duration value.
 func (v *Value) AsDuration() time.Duration { return v.dur }
 
+// AsUUID returns the UUID string for a UUID value.
+func (v *Value) AsUUID() string { return v.str }
+
 // AsThingTable returns the table name for a Thing (record ID) value.
 func (v *Value) AsThingTable() string { return v.thing[0] }
 
@@ -121,6 +124,8 @@ func (v *Value) String() string {
 		return fmt.Sprintf("%g", v.float)
 	case ValueDuration:
 		return v.dur.String()
+	case ValueUUID:
+		return v.str
 	case ValueString:
 		return v.str
 	case ValueDatetime:
@@ -176,12 +181,20 @@ func extractValue(cv *C.sr_value_t) Value {
 	case ValueObject:
 		cobj := (*C.sr_object_t)(unsafe.Pointer(&cv.anon0))
 		v.object = extractObject(cobj)
+	case ValueUUID:
+		cuuid := (*C.sr_uuid_t)(unsafe.Pointer(&cv.anon0))
+		b := cuuid._0
+		v.str = fmt.Sprintf(
+			"%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+			b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+			b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15],
+		)
 	case ValueThing:
 		thing := (*C.sr_thing_t)(unsafe.Pointer(&cv.anon0))
 		v.thing[0] = C.GoString(thing.table)
 		v.thing[1] = extractID(&thing.id)
 	default:
-		// For types we don't fully extract (UUID, Bytes, Geometry),
+		// For types we don't fully extract (Bytes, Geometry),
 		// the tag is set but data access requires specialized methods.
 	}
 	return v
