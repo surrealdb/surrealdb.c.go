@@ -24,7 +24,6 @@ type InteropNested struct {
 //
 // Excluded types (drivers produce different raw Go types):
 //   - bytes     — C driver returns tag name, Go SDK returns []byte
-//   - geometry  — C driver returns tag name, Go SDK returns custom type
 type InteropRecord struct {
 	ID       string                     `cbor:"id"`
 	BoolT    bool                       `cbor:"bool_t"`
@@ -50,6 +49,7 @@ type InteropRecord struct {
 	DecVal   surrealdb.Decimal          `cbor:"dec_val"`
 	DecNeg   surrealdb.Decimal          `cbor:"dec_neg"`
 	UuidVal  surrealdb.UUID             `cbor:"uuid_val"`
+	Point    surrealdb.GeometryPoint   `cbor:"point_val"`
 }
 
 // interopCreateSQL populates the record using SurrealQL type-cast functions.
@@ -81,7 +81,8 @@ CREATE interop:test SET
     dt_val    = type::datetime("2024-01-15T10:30:00Z"),
     dec_val   = <decimal> 99.99,
     dec_neg   = <decimal> -0.001,
-    uuid_val  = <uuid> "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8"
+    uuid_val  = <uuid> "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
+    point_val = type::point([1.5, 2.5])
 `
 
 // interopCreateContent populates the record using Go struct vars via CONTENT.
@@ -118,7 +119,8 @@ func interopContentVars() map[string]any {
 			"dt_val":   time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
 			"dec_val":  "99.99",
 			"dec_neg":  "-0.001",
-			"uuid_val": "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
+			"uuid_val":  "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
+			"point_val": surrealdb.GeometryPoint{Longitude: 1.5, Latitude: 2.5},
 		},
 	}
 }
@@ -149,6 +151,7 @@ type InteropContent struct {
 	DecVal   surrealdb.Decimal          `cbor:"dec_val"`
 	DecNeg   surrealdb.Decimal          `cbor:"dec_neg"`
 	UuidVal  surrealdb.UUID             `cbor:"uuid_val"`
+	Point    surrealdb.GeometryPoint   `cbor:"point_val"`
 }
 
 // interopContentStruct returns an InteropContent struct wrapped for the
@@ -180,6 +183,7 @@ func interopContentStruct() map[string]any {
 			DecVal:   "99.99",
 			DecNeg:   "-0.001",
 			UuidVal:  "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
+			Point:    surrealdb.GeometryPoint{Longitude: 1.5, Latitude: 2.5},
 		},
 	}
 }

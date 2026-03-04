@@ -21,8 +21,9 @@ import (
 )
 
 var (
-	timeDurationType = reflect.TypeOf(time.Duration(0))
-	timeTimeType     = reflect.TypeOf(time.Time{})
+	timeDurationType  = reflect.TypeOf(time.Duration(0))
+	timeTimeType      = reflect.TypeOf(time.Time{})
+	geometryPointType = reflect.TypeOf(driver.GeometryPoint{})
 )
 
 func init() {
@@ -149,6 +150,10 @@ func fieldToAny(fv reflect.Value) any {
 		if fv.Type() == timeTimeType {
 			return &models.CustomDateTime{Time: fv.Interface().(time.Time)}
 		}
+		if fv.Type() == geometryPointType {
+			pt := fv.Interface().(driver.GeometryPoint)
+			return &models.GeometryPoint{Longitude: pt.Longitude, Latitude: pt.Latitude}
+		}
 		rt := fv.Type()
 		m := make(map[string]any, rt.NumField())
 		for i := 0; i < rt.NumField(); i++ {
@@ -194,6 +199,13 @@ func normalizeValue(v any) any {
 			return nil
 		}
 		return val.Duration
+	case models.GeometryPoint:
+		return driver.GeometryPoint{Longitude: val.Longitude, Latitude: val.Latitude}
+	case *models.GeometryPoint:
+		if val == nil {
+			return nil
+		}
+		return driver.GeometryPoint{Longitude: val.Longitude, Latitude: val.Latitude}
 	case models.DecimalString:
 		return string(val)
 	case models.UUID:

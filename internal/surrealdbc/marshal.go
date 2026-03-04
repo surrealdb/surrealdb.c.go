@@ -13,8 +13,9 @@ import (
 )
 
 var (
-	timeDurationType = reflect.TypeOf(time.Duration(0))
-	timeTimeType     = reflect.TypeOf(time.Time{})
+	timeDurationType  = reflect.TypeOf(time.Duration(0))
+	timeTimeType      = reflect.TypeOf(time.Time{})
+	geometryPointType = reflect.TypeOf(driver.GeometryPoint{})
 )
 
 func marshalVars(v any) (*object, error) {
@@ -94,6 +95,11 @@ func insertValue(obj *object, key string, fv reflect.Value) error {
 	}
 	if fv.Type() == timeTimeType {
 		obj.insertDatetime(key, fv.Interface().(time.Time))
+		return nil
+	}
+	if fv.Type() == geometryPointType {
+		pt := fv.Interface().(driver.GeometryPoint)
+		obj.insertPoint(key, pt.Longitude, pt.Latitude)
 		return nil
 	}
 

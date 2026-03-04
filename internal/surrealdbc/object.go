@@ -80,6 +80,14 @@ func (o *object) insertThing(key, table, id string) {
 	freeCString(cID)
 }
 
+func (o *object) insertPoint(key string, x, y float64) {
+	cKey := cstring(key)
+	cVal := C.sr_value_point(C.double(x), C.double(y))
+	C.sr_object_insert(&o.c, cKey, cVal)
+	C.sr_value_free(cVal)
+	freeCString(cKey)
+}
+
 func (o *object) insertNull(key string) {
 	cKey := cstring(key)
 	cVal := C.sr_value_null()

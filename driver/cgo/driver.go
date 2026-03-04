@@ -111,6 +111,8 @@ func valueToAny(v *surrealdbc.Value) any {
 			return v.AsString()
 		}
 		return t.UTC()
+	case surrealdbc.ValueGeometry:
+		return v.AsGeometry()
 	case surrealdbc.ValueThing:
 		return driver.RecordID[any]{Table: v.AsThingTable(), ID: v.AsThingID()}
 	case surrealdbc.ValueArray:

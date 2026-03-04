@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"time"
 	"unsafe"
+
+	"github.com/surrealdb/surrealdb.c.go/driver"
 )
 
 // ValueTag identifies the type of a Value.
@@ -61,6 +63,7 @@ type Value struct {
 	float  float64
 	b      bool
 	dur    time.Duration
+	geom   any
 	values []Value
 	object []KV
 	thing  [2]string
@@ -98,6 +101,9 @@ func (v *Value) AsDuration() time.Duration { return v.dur }
 
 // AsUUID returns the UUID string for a UUID value.
 func (v *Value) AsUUID() string { return v.str }
+
+// AsGeometry returns the extracted geometry value, or nil if unsupported.
+func (v *Value) AsGeometry() any { return v.geom }
 
 // AsThingTable returns the table name for a Thing (record ID) value.
 func (v *Value) AsThingTable() string { return v.thing[0] }
@@ -189,12 +195,15 @@ func extractValue(cv *C.sr_value_t) Value {
 			b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
 			b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15],
 		)
+	case ValueGeometry:
+		geom := (*C.sr_sr_geometry)(unsafe.Pointer(&cv.anon0))
+		v.geom = extractGeometry(geom)
 	case ValueThing:
 		thing := (*C.sr_thing_t)(unsafe.Pointer(&cv.anon0))
 		v.thing[0] = C.GoString(thing.table)
 		v.thing[1] = extractID(&thing.id)
 	default:
-		// For types we don't fully extract (Bytes, Geometry),
+		// For types we don't fully extract (Bytes),
 		// the tag is set but data access requires specialized methods.
 	}
 	return v
@@ -208,6 +217,19 @@ func extractNumber(v *Value, cn *C.sr_number_t) {
 		v.float = float64(*(*C.double)(unsafe.Pointer(&cn.anon0)))
 	case C.SR_NUMBER_DECIMAL:
 		v.str = C.GoString(*(*C.sr_string_t)(unsafe.Pointer(&cn.anon0)))
+	}
+}
+
+func extractGeometry(geom *C.sr_sr_geometry) any {
+	switch geom.tag {
+	case C.sr_g_point:
+		pt := (*C.sr_sr_g_point)(unsafe.Pointer(&geom.anon0))
+		return driver.GeometryPoint{
+			Longitude: float64(pt._0.x),
+			Latitude:  float64(pt._0.y),
+		}
+	default:
+		return nil
 	}
 }
 

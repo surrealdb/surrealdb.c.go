@@ -15,6 +15,7 @@ type Notification = driver.Notification
 type RecordID[T any] = driver.RecordID[T]
 type Decimal = driver.Decimal
 type UUID = driver.UUID
+type GeometryPoint = driver.GeometryPoint
 
 // NewRecordID creates a RecordID from a table name and an identifier.
 func NewRecordID[T any](table string, id T) RecordID[T] {
