@@ -23,7 +23,6 @@ type InteropNested struct {
 // pure-Go drivers can round-trip identically through Query[T].
 //
 // Excluded types (drivers produce different raw Go types):
-//   - datetime  — C driver returns string, Go SDK returns time.Time
 //   - uuid      — C driver returns tag name, Go SDK returns UUID type
 //   - bytes     — C driver returns tag name, Go SDK returns []byte
 //   - geometry  — C driver returns tag name, Go SDK returns custom type
@@ -49,6 +48,7 @@ type InteropRecord struct {
 	RID      surrealdb.RecordID[string] `cbor:"rid_val"`
 	DurVal   time.Duration              `cbor:"dur_val"`
 	DurZero  time.Duration              `cbor:"dur_zero"`
+	DtVal    time.Time                  `cbor:"dt_val"`
 }
 
 const interopCreateSQL = `
@@ -75,7 +75,8 @@ CREATE interop:test SET
     },
     rid_val   = type::thing("person", "alice"),
     dur_val   = type::duration("1h30m10s"),
-    dur_zero  = type::duration("0s")
+    dur_zero  = type::duration("0s"),
+    dt_val    = type::datetime("2024-01-15T10:30:00Z")
 `
 
 func TestInteropTypes(t *testing.T) {

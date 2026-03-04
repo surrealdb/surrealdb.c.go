@@ -88,6 +88,10 @@ func setFromAny(rv reflect.Value, src any) error {
 		if driver.IsRecordIDType(rv.Type()) {
 			return fmt.Errorf("unmarshal: expected driver.RecordID source for RecordID target, got %T", src)
 		}
+		if srcRV := reflect.ValueOf(src); srcRV.Type().AssignableTo(rv.Type()) {
+			rv.Set(srcRV)
+			return nil
+		}
 		m, ok := src.(map[string]any)
 		if !ok {
 			return fmt.Errorf("unmarshal: expected map[string]any for struct, got %T", src)

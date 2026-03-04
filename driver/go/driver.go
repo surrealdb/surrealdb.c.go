@@ -168,6 +168,13 @@ func fieldToAny(fv reflect.Value) any {
 
 func normalizeValue(v any) any {
 	switch val := v.(type) {
+	case models.CustomDateTime:
+		return val.Time.UTC()
+	case *models.CustomDateTime:
+		if val == nil {
+			return nil
+		}
+		return val.Time.UTC()
 	case models.CustomDuration:
 		return val.Duration
 	case *models.CustomDuration:

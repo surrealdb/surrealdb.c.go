@@ -4,6 +4,7 @@ package cgo
 
 import (
 	"context"
+	"time"
 
 	"github.com/surrealdb/surrealdb.c.go/driver"
 	"github.com/surrealdb/surrealdb.c.go/internal/surrealdbc"
@@ -103,7 +104,11 @@ func valueToAny(v *surrealdbc.Value) any {
 	case surrealdbc.ValueDuration:
 		return v.AsDuration()
 	case surrealdbc.ValueDatetime:
-		return v.AsString()
+		t, err := time.Parse(time.RFC3339Nano, v.AsString())
+		if err != nil {
+			return v.AsString()
+		}
+		return t.UTC()
 	case surrealdbc.ValueThing:
 		return driver.RecordID[any]{Table: v.AsThingTable(), ID: v.AsThingID()}
 	case surrealdbc.ValueArray:
