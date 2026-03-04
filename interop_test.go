@@ -26,7 +26,6 @@ type InteropNested struct {
 //   - uuid      — C driver returns tag name, Go SDK returns UUID type
 //   - bytes     — C driver returns tag name, Go SDK returns []byte
 //   - geometry  — C driver returns tag name, Go SDK returns custom type
-//   - decimal   — C driver returns string, Go SDK returns custom type
 type InteropRecord struct {
 	ID       string                     `cbor:"id"`
 	BoolT    bool                       `cbor:"bool_t"`
@@ -49,6 +48,8 @@ type InteropRecord struct {
 	DurVal   time.Duration              `cbor:"dur_val"`
 	DurZero  time.Duration              `cbor:"dur_zero"`
 	DtVal    time.Time                  `cbor:"dt_val"`
+	DecVal   surrealdb.Decimal            `cbor:"dec_val"`
+	DecNeg   surrealdb.Decimal            `cbor:"dec_neg"`
 }
 
 const interopCreateSQL = `
@@ -76,7 +77,9 @@ CREATE interop:test SET
     rid_val   = type::thing("person", "alice"),
     dur_val   = type::duration("1h30m10s"),
     dur_zero  = type::duration("0s"),
-    dt_val    = type::datetime("2024-01-15T10:30:00Z")
+    dt_val    = type::datetime("2024-01-15T10:30:00Z"),
+    dec_val   = <decimal> 99.99,
+    dec_neg   = <decimal> -0.001
 `
 
 func TestInteropTypes(t *testing.T) {

@@ -182,6 +182,8 @@ func normalizeValue(v any) any {
 			return nil
 		}
 		return val.Duration
+	case models.DecimalString:
+		return string(val)
 	case models.RecordID:
 		return driver.RecordID[any]{Table: val.Table, ID: val.ID}
 	case *models.RecordID:

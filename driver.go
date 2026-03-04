@@ -13,6 +13,7 @@ type Driver = driver.Driver
 type QueryResult = driver.QueryResult
 type Notification = driver.Notification
 type RecordID[T any] = driver.RecordID[T]
+type Decimal = driver.Decimal
 
 // NewRecordID creates a RecordID from a table name and an identifier.
 func NewRecordID[T any](table string, id T) RecordID[T] {
