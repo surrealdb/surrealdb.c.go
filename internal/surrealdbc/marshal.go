@@ -53,7 +53,7 @@ func marshalStruct(rv reflect.Value) (*object, error) {
 }
 
 func fieldKey(f reflect.StructField) string {
-	tag := f.Tag.Get("db")
+	tag := f.Tag.Get("cbor")
 	if tag != "" {
 		if idx := strings.IndexByte(tag, ','); idx >= 0 {
 			tag = tag[:idx]

@@ -40,7 +40,10 @@ ifeq ($(shell uname -s),Darwin)
   endif
 endif
 
-.PHONY: all build test test/mem test/surrealkv test/rocksdb clean example example/basic example/surrealql
+GOLANGCI_LINT_VERSION ?= v2.10.1
+GOLANGCI_LINT         = $(CURDIR)/bin/golangci-lint
+
+.PHONY: all build test test/mem test/surrealkv test/rocksdb clean example example/basic example/surrealql lint lint/install
 
 all: build
 
@@ -106,6 +109,17 @@ example/basic: $(SURREALDB_C_LIB)
 
 example/surrealql: $(SURREALDB_C_LIB)
 	cd examples/surrealql && go run .
+
+# ---------------------------------------------------------------------------
+# Lint
+# ---------------------------------------------------------------------------
+
+lint/install:
+	@test -x $(GOLANGCI_LINT) && $(GOLANGCI_LINT) version | grep -q $(GOLANGCI_LINT_VERSION) || \
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(CURDIR)/bin $(GOLANGCI_LINT_VERSION)
+
+lint: $(SURREALDB_C_LIB) lint/install
+	$(GOLANGCI_LINT) run ./...
 
 clean:
 	rm -rf build

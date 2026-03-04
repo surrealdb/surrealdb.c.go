@@ -73,7 +73,7 @@ func extractNotification(cn *C.sr_notification_t) Notification {
 
 func generateID() string {
 	var b [16]byte
-	rand.Read(b[:])
+	_, _ = rand.Read(b[:])
 	h := hex.EncodeToString(b[:])
 	return fmt.Sprintf("%s-%s-%s-%s-%s", h[0:8], h[8:12], h[12:16], h[16:20], h[20:32])
 }
@@ -129,12 +129,12 @@ func poisonRecordID(lq *LiveHandle) string {
 
 func sendPoisonPill(c *Conn, lq *LiveHandle) {
 	rid := poisonRecordID(lq)
-	c.rawQuery(fmt.Sprintf("CREATE %s SET __lq = true", rid), nil)
+	_, _ = c.rawQuery(fmt.Sprintf("CREATE %s SET __lq = true", rid), nil)
 }
 
 func cleanupPoisonPill(c *Conn, lq *LiveHandle) {
 	rid := poisonRecordID(lq)
-	c.rawQuery(fmt.Sprintf("DELETE %s", rid), nil)
+	_, _ = c.rawQuery(fmt.Sprintf("DELETE %s", rid), nil)
 }
 
 func killServerSide(c *Conn, lq *LiveHandle) {

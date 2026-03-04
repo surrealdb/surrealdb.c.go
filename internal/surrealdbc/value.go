@@ -107,12 +107,8 @@ func (v *Value) String() string {
 	case ValueBool:
 		return fmt.Sprintf("%t", v.b)
 	case ValueNumber:
-		if v.str != "" { // decimal
+		if v.str != "" {
 			return v.str
-		}
-		if v.float != 0 || v.num == 0 {
-			// Distinguish int 0 from float by checking if str is set
-			// If num is nonzero, it's an int
 		}
 		if v.num != 0 {
 			return fmt.Sprintf("%d", v.num)

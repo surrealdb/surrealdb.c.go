@@ -10,13 +10,13 @@ func TestQuery(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()
 
-	db.Query(ctx, `CREATE person:a SET name = "Alice", age = 30`, nil)
-	db.Query(ctx, `CREATE person:b SET name = "Bob", age = 25`, nil)
+	mustQuery(t, db, ctx, `CREATE person:a SET name = "Alice", age = 30`, nil)
+	mustQuery(t, db, ctx, `CREATE person:b SET name = "Bob", age = 25`, nil)
 
 	type Person struct {
-		ID   string `db:"id"`
-		Name string `db:"name"`
-		Age  int64  `db:"age"`
+		ID   string `cbor:"id"`
+		Name string `cbor:"name"`
+		Age  int64  `cbor:"age"`
 	}
 
 	results, err := Query[Person](ctx, db, "SELECT * FROM person ORDER BY age ASC", nil)
@@ -42,7 +42,6 @@ func TestQuery(t *testing.T) {
 		t.Errorf("second: expected Alice/30, got %s/%d", people[1].Name, people[1].Age)
 	}
 
-	// Verify ID was unmarshaled as "table:id"
 	if people[0].ID != "person:b" {
 		t.Errorf("expected id=person:b, got %s", people[0].ID)
 	}
@@ -53,13 +52,13 @@ func TestQueryWithStructVars(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()
 
-	db.Query(ctx, `CREATE person:a SET name = "A", age = 20`, nil)
-	db.Query(ctx, `CREATE person:b SET name = "B", age = 30`, nil)
-	db.Query(ctx, `CREATE person:c SET name = "C", age = 40`, nil)
+	mustQuery(t, db, ctx, `CREATE person:a SET name = "A", age = 20`, nil)
+	mustQuery(t, db, ctx, `CREATE person:b SET name = "B", age = 30`, nil)
+	mustQuery(t, db, ctx, `CREATE person:c SET name = "C", age = 40`, nil)
 
 	type Row struct {
-		Name string `db:"name"`
-		Age  int64  `db:"age"`
+		Name string `cbor:"name"`
+		Age  int64  `cbor:"age"`
 	}
 
 	results, err := Query[Row](ctx, db,

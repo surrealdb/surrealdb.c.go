@@ -12,12 +12,12 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
+	if err := Run(); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run() error {
+func Run() error {
 	fmt.Println("=== SurrealDB + SurrealQL Query Builder Demo ===")
 	fmt.Println()
 
@@ -58,8 +58,8 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("CREATE %s: %w", p.id, err)
 		}
-		if results[0].Err() != nil {
-			return fmt.Errorf("CREATE %s statement error: %w", p.id, results[0].Err())
+		if results[0].Err != nil {
+			return fmt.Errorf("CREATE %s statement error: %w", p.id, results[0].Err)
 		}
 		fmt.Printf("    Created person:%s\n", p.id)
 	}
@@ -150,7 +150,11 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("DELETE: %w", err)
 	}
-	fmt.Printf("    Deleted (statement returned %d results)\n", len(results[0].Values()))
+	if rows, ok := results[0].Value.([]any); ok {
+		fmt.Printf("    Deleted (statement returned %d results)\n", len(rows))
+	} else {
+		fmt.Println("    Deleted")
+	}
 
 	// 8. Final state
 	fmt.Println()
@@ -187,37 +191,16 @@ func printQuery(sql string, vars map[string]any) {
 
 func printResults(results []surrealdb.QueryResult) {
 	for i, r := range results {
-		if r.Err() != nil {
-			fmt.Printf("    Statement %d ERROR: %v\n", i+1, r.Err())
+		if r.Err != nil {
+			fmt.Printf("    Statement %d ERROR: %v\n", i+1, r.Err)
 			continue
 		}
-		for j, v := range r.Values() {
-			fmt.Printf("    [%d] ", j)
-			printValue(&v)
-			fmt.Println()
-		}
-	}
-}
-
-func printValue(v *surrealdb.Value) {
-	switch v.Tag() {
-	case surrealdb.ValueObject:
-		fmt.Print("{")
-		for i, kv := range v.AsObject() {
-			if i > 0 {
-				fmt.Print(", ")
+		if rows, ok := r.Value.([]any); ok {
+			for j, row := range rows {
+				fmt.Printf("    [%d] %v\n", j, row)
 			}
-			fmt.Printf("%s: ", kv.Key)
-			printValue(&kv.Value)
+		} else {
+			fmt.Printf("    Statement %d: %v\n", i+1, r.Value)
 		}
-		fmt.Print("}")
-	case surrealdb.ValueThing:
-		fmt.Printf("%s:%s", v.AsThingTable(), v.AsThingID())
-	case surrealdb.ValueString:
-		fmt.Printf("%q", v.AsString())
-	case surrealdb.ValueNumber:
-		fmt.Print(v.String())
-	default:
-		fmt.Print(v.String())
 	}
 }

@@ -2,40 +2,57 @@ package surrealdb
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
+	"github.com/surrealdb/surrealdb.c.go/driver/cgo"
 	"github.com/surrealdb/surrealdb.c.go/internal/surrealdbc"
 )
 
-// Option configures the behavior of Open.
-type Option func(*surrealdbc.Config)
-
-// WithMaxPendingOps sets the maximum number of goroutines that may be blocked
-// inside C FFI calls (query, use, live) per DB instance at any time.
-// This bounds the worst-case goroutine leak when callers cancel their context
-// before a C call returns.
-// Default: 16.
-func WithMaxPendingOps(n int) Option {
-	return func(c *surrealdbc.Config) { c.MaxPendingOps = n }
-}
-
 // Open connects to a SurrealDB instance at the given endpoint.
 //
-// Supported endpoints:
-//   - "mem://"                   — in-memory embedded database
-//   - "surrealkv://path/to/file" — file-backed embedded database
-//   - "ws://host:port"           — remote WebSocket connection
-//   - "http://host:port"         — remote HTTP connection
+// The scheme determines which backend is used:
+//   - "mem://", "surrealkv://...", "rocksdb://..." — embedded C backend (requires CGo + libsurrealdb_c)
+//   - "ws://...", "wss://...", "http://...", "https://..." — remote backend via a registered driver
+//
+// Remote schemes require a driver to be registered first, typically via a
+// blank import:
+//
+//	import _ "github.com/surrealdb/surrealdb.c.go/driver/go"
 //
 // The context controls the connection timeout. The caller must call Close
-// on the returned DB when done.
-func Open(ctx context.Context, endpoint string, opts ...Option) (*DB, error) {
-	cfg := surrealdbc.DefaultConfig()
+// on the returned Driver when done.
+func Open(ctx context.Context, endpoint string, opts ...Option) (Driver, error) {
+	cfg := openConfig{maxPendingOps: 16}
 	for _, o := range opts {
 		o(&cfg)
 	}
-	conn, err := surrealdbc.Connect(ctx, endpoint, cfg)
-	if err != nil {
-		return nil, err
+
+	scheme := schemeOf(endpoint)
+
+	switch scheme {
+	case "mem", "surrealkv", "rocksdb", "file":
+		return openEmbedded(ctx, endpoint, cfg)
+	case "ws", "wss", "http", "https":
+		opener := getRemoteDriver()
+		if opener == nil {
+			return nil, fmt.Errorf("surrealdb: no remote driver registered for scheme %q; import _ \"github.com/surrealdb/surrealdb.c.go/driver/go\" to enable", scheme)
+		}
+		return opener(ctx, endpoint)
+	default:
+		return nil, fmt.Errorf("surrealdb: unsupported scheme %q in endpoint %q", scheme, endpoint)
 	}
-	return &DB{conn: conn}, nil
+}
+
+func schemeOf(endpoint string) string {
+	if idx := strings.Index(endpoint, "://"); idx >= 0 {
+		return endpoint[:idx]
+	}
+	return ""
+}
+
+func openEmbedded(ctx context.Context, endpoint string, cfg openConfig) (Driver, error) {
+	sdbCfg := surrealdbc.DefaultConfig()
+	sdbCfg.MaxPendingOps = cfg.maxPendingOps
+	return cgo.New(ctx, endpoint, sdbCfg)
 }

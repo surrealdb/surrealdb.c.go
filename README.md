@@ -30,9 +30,9 @@ import (
 )
 
 type Person struct {
-    ID   string `db:"id"`
-    Name string `db:"name"`
-    Age  int64  `db:"age"`
+    ID   string `cbor:"id"`
+    Name string `cbor:"name"`
+    Age  int64  `cbor:"age"`
 }
 
 func main() {
@@ -58,3 +58,4 @@ func main() {
 
 See [docs/](docs/README.md) for building, API reference, storage backends, and
 internals.
+

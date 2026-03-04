@@ -10,7 +10,7 @@ import (
 
 // Query executes a SurrealQL query, automatically marshaling vars.
 //
-// vars may be nil, a struct (with `db:"..."` tags), or map[string]any.
+// vars may be nil, a struct (with `cbor:"..."` tags), or map[string]any.
 func (c *Conn) Query(ctx context.Context, sql string, vars any) ([]QueryResult, error) {
 	obj, err := marshalVars(vars)
 	if err != nil {

@@ -4,16 +4,16 @@ import "testing"
 
 func TestMarshalObjectFromStruct(t *testing.T) {
 	type Address struct {
-		City  string `db:"city"`
-		State string `db:"state"`
+		City  string `cbor:"city"`
+		State string `cbor:"state"`
 	}
 	type Person struct {
-		Name    string  `db:"name"`
-		Age     int     `db:"age"`
-		Active  bool    `db:"active"`
-		Score   float64 `db:"score"`
-		Skipped string  `db:"-"`
-		Address Address `db:"address"`
+		Name    string  `cbor:"name"`
+		Age     int     `cbor:"age"`
+		Active  bool    `cbor:"active"`
+		Score   float64 `cbor:"score"`
+		Skipped string  `cbor:"-"`
+		Address Address `cbor:"address"`
 	}
 
 	obj, err := marshalObject(Person{

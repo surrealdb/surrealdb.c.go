@@ -10,12 +10,12 @@ func TestDBQueryWithStructVars(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()
 
-	db.Query(ctx, `CREATE person:a SET name = "A", age = 20`, nil)
-	db.Query(ctx, `CREATE person:b SET name = "B", age = 30`, nil)
-	db.Query(ctx, `CREATE person:c SET name = "C", age = 40`, nil)
+	mustQuery(t, db, ctx, `CREATE person:a SET name = "A", age = 20`, nil)
+	mustQuery(t, db, ctx, `CREATE person:b SET name = "B", age = 30`, nil)
+	mustQuery(t, db, ctx, `CREATE person:c SET name = "C", age = 40`, nil)
 
 	type Vars struct {
-		MinAge int `db:"min_age"`
+		MinAge int `cbor:"min_age"`
 	}
 
 	results, err := db.Query(ctx,
@@ -25,24 +25,25 @@ func TestDBQueryWithStructVars(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
-	vals := results[0].Values()
-	if len(vals) != 2 {
-		t.Fatalf("expected 2 records, got %d", len(vals))
+	rows, ok := results[0].Value.([]any)
+	if !ok {
+		t.Fatalf("expected []any, got %T", results[0].Value)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 records, got %d", len(rows))
 	}
 
-	// Verify the results are B (age 30) and C (age 40)
-	for i, v := range vals {
-		kvs := v.AsObject()
-		for _, kv := range kvs {
-			if kv.Key == "age" {
-				age := kv.Value.AsInt()
-				if i == 0 && age != 30 {
-					t.Errorf("first result: expected age=30, got %d", age)
-				}
-				if i == 1 && age != 40 {
-					t.Errorf("second result: expected age=40, got %d", age)
-				}
-			}
+	for i, row := range rows {
+		rec, ok := row.(map[string]any)
+		if !ok {
+			t.Fatalf("expected map[string]any, got %T", row)
+		}
+		age, _ := rec["age"].(int64)
+		if i == 0 && age != 30 {
+			t.Errorf("first result: expected age=30, got %d", age)
+		}
+		if i == 1 && age != 40 {
+			t.Errorf("second result: expected age=40, got %d", age)
 		}
 	}
 }

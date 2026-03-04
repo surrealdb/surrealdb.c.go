@@ -1,7 +1,10 @@
 module github.com/surrealdb/surrealdb.c.go/examples/basic
 
-go 1.22
+go 1.23
 
 require github.com/surrealdb/surrealdb.c.go v0.0.0
 
-replace github.com/surrealdb/surrealdb.c.go => ../../
+replace (
+	github.com/surrealdb/surrealdb.c.go => ../../
+	github.com/surrealdb/surrealdb.c.go/driver/go => ../../driver/go
+)

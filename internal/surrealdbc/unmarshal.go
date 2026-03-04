@@ -7,7 +7,7 @@ import (
 
 // UnmarshalValue converts a Value into a Go value of type T.
 //
-// For struct T: the Value must be ValueObject. Fields are matched by `db:"..."` tags.
+// For struct T: the Value must be ValueObject. Fields are matched by `cbor:"..."` tags.
 // For primitive T (string, bool, int/int64, float64): the Value is extracted directly.
 func UnmarshalValue[T any](v Value) (T, error) {
 	var zero T
