@@ -47,11 +47,12 @@ type InteropRecord struct {
 	DurVal   time.Duration              `cbor:"dur_val"`
 	DurZero  time.Duration              `cbor:"dur_zero"`
 	DtVal    time.Time                  `cbor:"dt_val"`
-	DecVal   surrealdb.Decimal            `cbor:"dec_val"`
-	DecNeg   surrealdb.Decimal            `cbor:"dec_neg"`
-	UuidVal  surrealdb.UUID               `cbor:"uuid_val"`
+	DecVal   surrealdb.Decimal          `cbor:"dec_val"`
+	DecNeg   surrealdb.Decimal          `cbor:"dec_neg"`
+	UuidVal  surrealdb.UUID             `cbor:"uuid_val"`
 }
 
+// interopCreateSQL populates the record using SurrealQL type-cast functions.
 const interopCreateSQL = `
 CREATE interop:test SET
     bool_t    = type::bool("true"),
@@ -83,17 +84,170 @@ CREATE interop:test SET
     uuid_val  = <uuid> "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8"
 `
 
+// interopCreateContent populates the record using Go struct vars via CONTENT.
+const interopCreateContent = `CREATE interop:test CONTENT $content`
+
+// interopContentVars returns the InteropRecord as a map suitable for
+// passing to db.Query as the $content variable.
+func interopContentVars() map[string]any {
+	return map[string]any{
+		"content": map[string]any{
+			"bool_t":    true,
+			"bool_f":    false,
+			"int_pos":   int64(42),
+			"int_neg":   int64(-17),
+			"int_zero":  int64(0),
+			"int_big":   int64(1099511627776),
+			"float_pos": 3.14,
+			"float_neg": -2.718,
+			"str_val":   "hello world",
+			"str_empty": "",
+			"null_val":  nil,
+			"arr_int":   []int64{1, 2, 3},
+			"arr_str":   []string{"a", "b", "c"},
+			"arr_bool":  []bool{true, false, true},
+			"arr_empty": []int64{},
+			"nested": map[string]any{
+				"foo": "bar",
+				"num": int64(99),
+				"ok":  true,
+			},
+			"rid_val":  surrealdb.NewRecordID("person", "alice"),
+			"dur_val":  time.Hour + 30*time.Minute + 10*time.Second,
+			"dur_zero": time.Duration(0),
+			"dt_val":   time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
+			"dec_val":  "99.99",
+			"dec_neg":  "-0.001",
+			"uuid_val": "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
+		},
+	}
+}
+
+// InteropContent is InteropRecord without the ID field so it can be
+// passed as CONTENT to CREATE without conflicting with the record ID.
+type InteropContent struct {
+	BoolT    bool                       `cbor:"bool_t"`
+	BoolF    bool                       `cbor:"bool_f"`
+	IntPos   int64                      `cbor:"int_pos"`
+	IntNeg   int64                      `cbor:"int_neg"`
+	IntZero  int64                      `cbor:"int_zero"`
+	IntBig   int64                      `cbor:"int_big"`
+	FloatPos float64                    `cbor:"float_pos"`
+	FloatNeg float64                    `cbor:"float_neg"`
+	Str      string                     `cbor:"str_val"`
+	StrEmpty string                     `cbor:"str_empty"`
+	NullVal  any                        `cbor:"null_val"`
+	ArrInt   []int64                    `cbor:"arr_int"`
+	ArrStr   []string                   `cbor:"arr_str"`
+	ArrBool  []bool                     `cbor:"arr_bool"`
+	ArrEmpty []int64                    `cbor:"arr_empty"`
+	Nested   InteropNested              `cbor:"nested"`
+	RID      surrealdb.RecordID[string] `cbor:"rid_val"`
+	DurVal   time.Duration              `cbor:"dur_val"`
+	DurZero  time.Duration              `cbor:"dur_zero"`
+	DtVal    time.Time                  `cbor:"dt_val"`
+	DecVal   surrealdb.Decimal          `cbor:"dec_val"`
+	DecNeg   surrealdb.Decimal          `cbor:"dec_neg"`
+	UuidVal  surrealdb.UUID             `cbor:"uuid_val"`
+}
+
+// interopContentStruct returns an InteropContent struct wrapped for the
+// $content variable. Tests that drivers can marshal Go structs with
+// cbor tags into SurrealDB record content.
+func interopContentStruct() map[string]any {
+	return map[string]any{
+		"content": InteropContent{
+			BoolT:    true,
+			BoolF:    false,
+			IntPos:   42,
+			IntNeg:   -17,
+			IntZero:  0,
+			IntBig:   1099511627776,
+			FloatPos: 3.14,
+			FloatNeg: -2.718,
+			Str:      "hello world",
+			StrEmpty: "",
+			NullVal:  nil,
+			ArrInt:   []int64{1, 2, 3},
+			ArrStr:   []string{"a", "b", "c"},
+			ArrBool:  []bool{true, false, true},
+			ArrEmpty: []int64{},
+			Nested:   InteropNested{Foo: "bar", Num: 99, Ok: true},
+			RID:      surrealdb.NewRecordID("person", "alice"),
+			DurVal:   time.Hour + 30*time.Minute + 10*time.Second,
+			DurZero:  0,
+			DtVal:    time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
+			DecVal:   "99.99",
+			DecNeg:   "-0.001",
+			UuidVal:  "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
+		},
+	}
+}
+
+type recordPopulator struct {
+	name string
+	fn   func(t *testing.T, db surrealdb.Driver, ctx context.Context)
+}
+
+var populators = []recordPopulator{
+	{
+		name: "sql",
+		fn: func(t *testing.T, db surrealdb.Driver, ctx context.Context) {
+			t.Helper()
+			_, err := db.Query(ctx, interopCreateSQL, nil)
+			require.NoError(t, err)
+		},
+	},
+	{
+		name: "map",
+		fn: func(t *testing.T, db surrealdb.Driver, ctx context.Context) {
+			t.Helper()
+			_, err := db.Query(ctx, interopCreateContent, interopContentVars())
+			require.NoError(t, err)
+		},
+	},
+	{
+		name: "struct",
+		fn: func(t *testing.T, db surrealdb.Driver, ctx context.Context) {
+			t.Helper()
+			_, err := db.Query(ctx, interopCreateContent, interopContentStruct())
+			require.NoError(t, err)
+		},
+	},
+}
+
 func TestInteropTypes(t *testing.T) {
 	wsURL := startSurrealDBContainer(t)
 
-	cgoResult := queryInteropRecord(t, "mem://")
-	goResult := queryInteropRecord(t, wsURL)
+	endpoints := []struct {
+		name     string
+		endpoint string
+	}{
+		{"cgo", "mem://"},
+		{"go", wsURL},
+	}
 
-	assert.Equal(t, cgoResult, goResult,
-		"CGo and Go drivers should produce identical typed results")
+	// Collect results for all 4 combinations, then cross-compare.
+	results := make(map[string]InteropRecord)
+	for _, ep := range endpoints {
+		for _, pop := range populators {
+			key := ep.name + "/" + pop.name
+			t.Run(key, func(t *testing.T) {
+				rec := runInterop(t, ep.endpoint, pop, key)
+				results[key] = rec
+			})
+		}
+	}
+
+	// All 6 results should be identical.
+	keys := []string{"cgo/sql", "cgo/map", "cgo/struct", "go/sql", "go/map", "go/struct"}
+	for i := 1; i < len(keys); i++ {
+		assert.Equal(t, results[keys[0]], results[keys[i]],
+			"%s and %s should produce identical results", keys[0], keys[i])
+	}
 }
 
-func queryInteropRecord(t *testing.T, endpoint string) InteropRecord {
+func runInterop(t *testing.T, endpoint string, pop recordPopulator, key string) InteropRecord {
 	t.Helper()
 	ctx := context.Background()
 
@@ -101,12 +255,15 @@ func queryInteropRecord(t *testing.T, endpoint string) InteropRecord {
 	require.NoError(t, err)
 	defer db.Close()
 
-	ns := fmt.Sprintf("interop_ns_%s", endpoint)
+	ns := fmt.Sprintf("interop_%s", key)
 	require.NoError(t, db.Use(ctx, ns, "interop_db"))
 
-	_, err = db.Query(ctx, interopCreateSQL, nil)
-	require.NoError(t, err)
+	pop.fn(t, db, ctx)
+	return selectInteropRecord(t, db, ctx)
+}
 
+func selectInteropRecord(t *testing.T, db surrealdb.Driver, ctx context.Context) InteropRecord {
+	t.Helper()
 	results, err := surrealdb.Query[InteropRecord](ctx, db, "SELECT * FROM interop:test", nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)

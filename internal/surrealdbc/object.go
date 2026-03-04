@@ -1,9 +1,26 @@
 package surrealdbc
 
-// #include "surrealdb.h"
+/*
+#include "surrealdb.h"
+
+// Builds an sr_value_t array from an array of value pointers.
+// Caller must free each element and the values array separately.
+static struct sr_value_t *build_array(struct sr_value_t **values, int count) {
+    struct sr_value_t *arr_val = sr_value_array();
+    for (int i = 0; i < count; i++) {
+        struct sr_array_t *old = arr_val->sr_value_array;
+        arr_val->sr_value_array = sr_array_push(old, values[i]);
+        if (old) sr_array_free(old);
+    }
+    return arr_val;
+}
+*/
 import "C"
 
-import "unsafe"
+import (
+	"time"
+	"unsafe"
+)
 
 type object struct {
 	c     C.sr_object_t
@@ -29,9 +46,11 @@ func (o *object) insertStr(key, value string) {
 	freeCString(cVal)
 }
 
-func (o *object) insertInt(key string, value int) {
+func (o *object) insertInt(key string, value int64) {
 	cKey := cstring(key)
-	C.sr_object_insert_int(&o.c, cKey, C.int(value))
+	cVal := C.sr_value_int(C.int64_t(value))
+	C.sr_object_insert(&o.c, cKey, cVal)
+	C.sr_value_free(cVal)
 	freeCString(cKey)
 }
 
@@ -59,6 +78,50 @@ func (o *object) insertThing(key, table, id string) {
 	freeCString(cKey)
 	freeCString(cTable)
 	freeCString(cID)
+}
+
+func (o *object) insertNull(key string) {
+	cKey := cstring(key)
+	cVal := C.sr_value_null()
+	C.sr_object_insert(&o.c, cKey, cVal)
+	C.sr_value_free(cVal)
+	freeCString(cKey)
+}
+
+func (o *object) insertDuration(key string, d time.Duration) {
+	cKey := cstring(key)
+	secs := C.uint64_t(d / time.Second)
+	nanos := C.uint32_t((d % time.Second) / time.Nanosecond)
+	cVal := C.sr_value_duration(secs, nanos)
+	C.sr_object_insert(&o.c, cKey, cVal)
+	C.sr_value_free(cVal)
+	freeCString(cKey)
+}
+
+func (o *object) insertDatetime(key string, t time.Time) {
+	cKey := cstring(key)
+	cRFC := cstring(t.UTC().Format(time.RFC3339Nano))
+	cVal := C.sr_value_datetime(cRFC)
+	C.sr_object_insert(&o.c, cKey, cVal)
+	C.sr_value_free(cVal)
+	freeCString(cKey)
+	freeCString(cRFC)
+}
+
+func (o *object) insertArray(key string, cValues []*C.sr_value_t) {
+	cKey := cstring(key)
+	var cArr *C.sr_value_t
+	if len(cValues) == 0 {
+		cArr = C.sr_value_array()
+	} else {
+		cArr = C.build_array(&cValues[0], C.int(len(cValues)))
+	}
+	C.sr_object_insert(&o.c, cKey, cArr)
+	C.sr_value_free(cArr)
+	freeCString(cKey)
+	for _, v := range cValues {
+		C.sr_value_free(v)
+	}
 }
 
 func (o *object) insertObject(key string, nested *object) {

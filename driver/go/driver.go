@@ -12,11 +12,17 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	surrealdb "github.com/surrealdb/surrealdb.c.go"
 	"github.com/surrealdb/surrealdb.c.go/driver"
 	surrealdbgo "github.com/surrealdb/surrealdb.go"
 	"github.com/surrealdb/surrealdb.go/pkg/models"
+)
+
+var (
+	timeDurationType = reflect.TypeOf(time.Duration(0))
+	timeTimeType     = reflect.TypeOf(time.Time{})
 )
 
 func init() {
@@ -140,6 +146,9 @@ func fieldToAny(fv reflect.Value) any {
 		if driver.IsRecordIDType(fv.Type()) {
 			return models.NewRecordID(fv.Field(0).String(), fv.Field(1).Interface())
 		}
+		if fv.Type() == timeTimeType {
+			return &models.CustomDateTime{Time: fv.Interface().(time.Time)}
+		}
 		rt := fv.Type()
 		m := make(map[string]any, rt.NumField())
 		for i := 0; i < rt.NumField(); i++ {
@@ -162,6 +171,9 @@ func fieldToAny(fv reflect.Value) any {
 		}
 		return m
 	default:
+		if fv.Type() == timeDurationType {
+			return &models.CustomDuration{Duration: time.Duration(fv.Int())}
+		}
 		return fv.Interface()
 	}
 }
@@ -237,8 +249,8 @@ func denormalizeValue(v any) any {
 		return out
 	default:
 		rv := reflect.ValueOf(v)
-		if rv.Kind() == reflect.Struct && driver.IsRecordIDType(rv.Type()) {
-			return models.NewRecordID(rv.Field(0).String(), rv.Field(1).Interface())
+		if rv.Kind() == reflect.Struct {
+			return fieldToAny(rv)
 		}
 		return v
 	}

@@ -1,11 +1,20 @@
 package surrealdbc
 
+// #include "surrealdb.h"
+import "C"
+
 import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/surrealdb/surrealdb.c.go/driver"
+)
+
+var (
+	timeDurationType = reflect.TypeOf(time.Duration(0))
+	timeTimeType     = reflect.TypeOf(time.Time{})
 )
 
 func marshalVars(v any) (*object, error) {
@@ -66,13 +75,25 @@ func fieldKey(f reflect.StructField) string {
 }
 
 func insertValue(obj *object, key string, fv reflect.Value) error {
-	if fv.Kind() == reflect.Interface && !fv.IsNil() {
+	if fv.Kind() == reflect.Interface {
+		if fv.IsNil() {
+			obj.insertNull(key)
+			return nil
+		}
 		fv = fv.Elem()
 	}
 	if fv.Kind() == reflect.Struct && driver.IsRecordIDType(fv.Type()) {
 		table := fv.Field(0).String()
 		id := fmt.Sprintf("%v", fv.Field(1).Interface())
 		obj.insertThing(key, table, id)
+		return nil
+	}
+	if fv.Type() == timeDurationType {
+		obj.insertDuration(key, time.Duration(fv.Int()))
+		return nil
+	}
+	if fv.Type() == timeTimeType {
+		obj.insertDatetime(key, fv.Interface().(time.Time))
 		return nil
 	}
 
@@ -82,11 +103,24 @@ func insertValue(obj *object, key string, fv reflect.Value) error {
 	case reflect.Bool:
 		obj.insertBool(key, fv.Bool())
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		obj.insertInt(key, int(fv.Int()))
+		obj.insertInt(key, fv.Int())
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		obj.insertInt(key, int(fv.Uint()))
+		obj.insertInt(key, int64(fv.Uint()))
 	case reflect.Float32, reflect.Float64:
 		obj.insertFloat(key, fv.Float())
+	case reflect.Slice:
+		elems := make([]*C.sr_value_t, fv.Len())
+		for i := 0; i < fv.Len(); i++ {
+			v, err := scalarToCValue(fv.Index(i))
+			if err != nil {
+				for _, prev := range elems[:i] {
+					C.sr_value_free(prev)
+				}
+				return fmt.Errorf("index %d: %w", i, err)
+			}
+			elems[i] = v
+		}
+		obj.insertArray(key, elems)
 	case reflect.Struct:
 		nested, err := marshalStruct(fv)
 		if err != nil {
@@ -105,6 +139,32 @@ func insertValue(obj *object, key string, fv reflect.Value) error {
 		return fmt.Errorf("unsupported type %s", fv.Kind())
 	}
 	return nil
+}
+
+func scalarToCValue(fv reflect.Value) (*C.sr_value_t, error) {
+	if fv.Kind() == reflect.Interface {
+		if fv.IsNil() {
+			return C.sr_value_null(), nil
+		}
+		fv = fv.Elem()
+	}
+	switch fv.Kind() {
+	case reflect.String:
+		cs := cstring(fv.String())
+		v := C.sr_value_string(cs)
+		freeCString(cs)
+		return v, nil
+	case reflect.Bool:
+		return C.sr_value_bool(C._Bool(fv.Bool())), nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return C.sr_value_int(C.int64_t(fv.Int())), nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return C.sr_value_int(C.int64_t(fv.Uint())), nil
+	case reflect.Float32, reflect.Float64:
+		return C.sr_value_float(C.double(fv.Float())), nil
+	default:
+		return nil, fmt.Errorf("unsupported array element type %s", fv.Kind())
+	}
 }
 
 func marshalMap(rv reflect.Value) (*object, error) {
