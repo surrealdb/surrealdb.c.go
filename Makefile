@@ -1,3 +1,6 @@
+# To build/test against a local surrealdb.c fork:
+#   make test SURREALDB_C_DIR=~/src/surrealdb.c
+# If the library is already built there, cargo build is skipped automatically.
 SURREALDB_C_REPO ?= https://github.com/surrealdb/surrealdb.c.git
 SURREALDB_C_REF  ?= main
 SURREALDB_C_DIR  ?= build/surrealdb.c
@@ -13,6 +16,14 @@ endif
 
 SURREALDB_C_LIB     = $(SURREALDB_C_LIBDIR)/libsurrealdb_c.a
 SURREALDB_C_INCLUDE = $(SURREALDB_C_DIR)/include
+
+# Auto-detect pre-built: when SURREALDB_C_DIR is overridden and the
+# library already exists, skip clone+build entirely.
+ifneq ($(SURREALDB_C_DIR),build/surrealdb.c)
+  ifneq (,$(wildcard $(SURREALDB_C_LIB)))
+    _SURREALDB_C_PREBUILT := 1
+  endif
+endif
 
 export CGO_LDFLAGS  := -L$(CURDIR)/$(SURREALDB_C_LIBDIR)
 
@@ -48,8 +59,10 @@ GOLANGCI_LINT         = $(CURDIR)/bin/golangci-lint
 all: build
 
 # ---------------------------------------------------------------------------
-# build/surrealdb.c — clone + build the C library
+# build/surrealdb.c — clone + build the C library (or use pre-built)
 # ---------------------------------------------------------------------------
+
+ifndef _SURREALDB_C_PREBUILT
 
 build/surrealdb.c: $(SURREALDB_C_LIB)
 
@@ -60,10 +73,6 @@ $(SURREALDB_C_LIB): $(SURREALDB_C_DIR)/Cargo.toml
 	cd $(SURREALDB_C_DIR) && cargo build --release || { $(CURDIR)/scripts/diagnose-build.sh; exit 1; }
 	cp $(SURREALDB_C_INCLUDE)/surrealdb.h surrealdb.h
 
-# Patch Cargo.toml to add optional feature forwarding (idempotent).
-# Touch the default .a afterwards so Make doesn't think it needs
-# rebuilding (the patch only adds an unused [features] section).
-# Verify via git diff that the expected lines are present.
 $(SURREALDB_C_DIR)/.features-patched: $(SURREALDB_C_DIR)/Cargo.toml
 	@grep -q '\[features\]' $(SURREALDB_C_DIR)/Cargo.toml || { \
 		printf '\n[features]\nkv-rocksdb = ["surrealdb/kv-rocksdb"]\n' \
@@ -81,6 +90,14 @@ $(SURREALDB_C_DIR)/.features-patched: $(SURREALDB_C_DIR)/Cargo.toml
 $(SURREALDB_C_ROCKSDB_LIB): $(SURREALDB_C_DIR)/.features-patched
 	cd $(SURREALDB_C_DIR) && cargo build --release --features kv-rocksdb --target-dir target-rocksdb || { $(CURDIR)/scripts/diagnose-build.sh; exit 1; }
 	cp $(SURREALDB_C_INCLUDE)/surrealdb.h surrealdb.h
+
+else
+
+$(SURREALDB_C_LIB):
+	@echo "Using pre-built library: $@"
+	@cp -f $(SURREALDB_C_INCLUDE)/surrealdb.h surrealdb.h 2>/dev/null || true
+
+endif
 
 # ---------------------------------------------------------------------------
 # Go targets
