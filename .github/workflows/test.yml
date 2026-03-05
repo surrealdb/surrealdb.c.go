@@ -15,6 +15,11 @@ jobs:
       matrix:
         surrealdb-version: [v2, v3.0.1]
         remote-driver: [go, cgo]
+        include:
+          # cgo + v3 needs surrealdb.c built from the v3-compatible branch
+          - surrealdb-version: v3.0.1
+            remote-driver: cgo
+            surrealdb-c-ref: surrealdb-v3-support
     steps:
       - uses: actions/checkout@v6
 
@@ -32,6 +37,7 @@ jobs:
           SURREALDB_IMAGE_TAG: ${{ matrix.surrealdb-version }}
           SURREALDB_REMOTE_DRIVER: ${{ matrix.remote-driver }}
           SURREALDB_C_FEATURES: ${{ matrix.remote-driver == 'cgo' && 'protocol-ws' || '' }}
+          SURREALDB_C_REF: ${{ matrix.surrealdb-c-ref || 'main' }}
         run: make test
 
   # macOS: embedded CGo tests only (no Docker)
