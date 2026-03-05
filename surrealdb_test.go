@@ -215,6 +215,8 @@ func TestLiveAndKill(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()
 
+	mustQuery(t, db, ctx, "DEFINE TABLE person SCHEMALESS", nil)
+
 	id, ch, kill, err := db.Live(ctx, "person")
 	if err != nil {
 		t.Fatalf("Live: %v", err)

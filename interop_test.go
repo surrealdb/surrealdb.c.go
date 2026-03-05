@@ -3,6 +3,7 @@ package surrealdb_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,8 +75,20 @@ type InteropRecord struct {
 	BytesVal []byte                    `cbor:"bytes_val"`
 }
 
-// interopCreateSQL populates the record using SurrealQL type-cast functions.
-const interopCreateSQL = `
+// detectThingFunc probes whether type::thing (v2) is available.
+// SurrealDB v3 renamed type::thing to type::record, so we fall back.
+func detectThingFunc(t *testing.T, db surrealdb.Driver, ctx context.Context) string {
+	t.Helper()
+	res, err := db.Query(ctx, `RETURN type::thing("tb", "id")`, nil)
+	if err == nil && len(res) > 0 && res[0].Err == nil {
+		return "type::thing"
+	}
+	return "type::record"
+}
+
+// interopCreateSQL builds the SQL using the correct thing/record function.
+func interopCreateSQL(thingFn string) string {
+	return strings.ReplaceAll(`
 CREATE interop:test SET
     bool_t    = type::bool("true"),
     bool_f    = type::bool("false"),
@@ -98,7 +111,7 @@ CREATE interop:test SET
         num: type::int("99"),
         ok:  type::bool("true")
     },
-    rid_val   = type::thing("person", "alice"),
+    rid_val   = TYPE_THING("person", "alice"),
     dur_val   = type::duration("1h30m10s"),
     dur_zero  = type::duration("0s"),
     dt_val    = type::datetime("2024-01-15T10:30:00Z"),
@@ -125,7 +138,8 @@ CREATE interop:test SET
         s:   type::string("mixed"),
         dur: type::duration("2h45m")
     }
-`
+`, "TYPE_THING", thingFn)
+}
 
 // interopCreateContent populates the record using Go struct vars via CONTENT.
 const interopCreateContent = `CREATE interop:test CONTENT $content`
@@ -277,21 +291,21 @@ func interopContentStruct() map[string]any {
 
 type recordPopulator struct {
 	name string
-	fn   func(t *testing.T, db surrealdb.Driver, ctx context.Context)
+	fn   func(t *testing.T, db surrealdb.Driver, ctx context.Context, thingFn string)
 }
 
 var populators = []recordPopulator{
 	{
 		name: "sql",
-		fn: func(t *testing.T, db surrealdb.Driver, ctx context.Context) {
+		fn: func(t *testing.T, db surrealdb.Driver, ctx context.Context, thingFn string) {
 			t.Helper()
-			_, err := db.Query(ctx, interopCreateSQL, nil)
+			_, err := db.Query(ctx, interopCreateSQL(thingFn), nil)
 			require.NoError(t, err)
 		},
 	},
 	{
 		name: "map",
-		fn: func(t *testing.T, db surrealdb.Driver, ctx context.Context) {
+		fn: func(t *testing.T, db surrealdb.Driver, ctx context.Context, _ string) {
 			t.Helper()
 			_, err := db.Query(ctx, interopCreateContent, interopContentVars())
 			require.NoError(t, err)
@@ -299,7 +313,7 @@ var populators = []recordPopulator{
 	},
 	{
 		name: "struct",
-		fn: func(t *testing.T, db surrealdb.Driver, ctx context.Context) {
+		fn: func(t *testing.T, db surrealdb.Driver, ctx context.Context, _ string) {
 			t.Helper()
 			_, err := db.Query(ctx, interopCreateContent, interopContentStruct())
 			require.NoError(t, err)
@@ -349,7 +363,8 @@ func runInterop(t *testing.T, endpoint string, pop recordPopulator, key string) 
 	ns := fmt.Sprintf("interop_%s", key)
 	require.NoError(t, db.Use(ctx, ns, "interop_db"))
 
-	pop.fn(t, db, ctx)
+	thingFn := detectThingFunc(t, db, ctx)
+	pop.fn(t, db, ctx, thingFn)
 	return selectInteropRecord(t, db, ctx)
 }
 

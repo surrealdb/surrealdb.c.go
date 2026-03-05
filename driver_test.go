@@ -3,6 +3,7 @@ package surrealdb_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -37,10 +38,16 @@ func startSurrealDBContainer(t *testing.T) string {
 
 	containerName := fmt.Sprintf("surrealdb-test-%d", time.Now().UnixNano())
 
+	imageTag := os.Getenv("SURREALDB_IMAGE_TAG")
+	if imageTag == "" {
+		imageTag = "v2"
+	}
+	image := "surrealdb/surrealdb:" + imageTag
+
 	runCmd := exec.Command("docker", "run", "-d",
 		"-p", "0:8000",
 		"--name", containerName,
-		"surrealdb/surrealdb:v2",
+		image,
 		"start", "--unauthenticated",
 	)
 	out, err := runCmd.CombinedOutput()
