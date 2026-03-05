@@ -7,12 +7,12 @@ on:
     branches: [main]
 
 jobs:
-  test:
-    runs-on: ${{ matrix.os }}
+  # Linux: full matrix with Docker (embedded + remote via go/cgo drivers)
+  test-linux:
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
         surrealdb-version: [v2, v3.0.1]
         remote-driver: [go, cgo]
     steps:
@@ -32,4 +32,21 @@ jobs:
           SURREALDB_IMAGE_TAG: ${{ matrix.surrealdb-version }}
           SURREALDB_REMOTE_DRIVER: ${{ matrix.remote-driver }}
           SURREALDB_C_FEATURES: ${{ matrix.remote-driver == 'cgo' && 'protocol-ws' || '' }}
+        run: make test
+
+  # macOS: embedded CGo tests only (no Docker)
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Run embedded tests
+        env:
+          SURREALDB_SKIP_DOCKER: "1"
         run: make test

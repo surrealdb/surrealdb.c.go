@@ -36,6 +36,10 @@ func TestDrivers(t *testing.T) {
 func startSurrealDBContainer(t *testing.T) string {
 	t.Helper()
 
+	if os.Getenv("SURREALDB_SKIP_DOCKER") != "" {
+		t.Skip("SURREALDB_SKIP_DOCKER is set, skipping Docker-dependent test")
+	}
+
 	containerName := fmt.Sprintf("surrealdb-test-%d", time.Now().UnixNano())
 
 	imageTag := os.Getenv("SURREALDB_IMAGE_TAG")
@@ -52,7 +56,7 @@ func startSurrealDBContainer(t *testing.T) string {
 	)
 	out, err := runCmd.CombinedOutput()
 	if err != nil {
-		t.Skipf("docker not available or image not pulled: %v\n%s", err, out)
+		t.Fatalf("docker run failed: %v\n%s", err, out)
 	}
 
 	t.Cleanup(func() {
