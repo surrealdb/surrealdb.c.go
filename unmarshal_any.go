@@ -99,6 +99,10 @@ func setFromAny(rv reflect.Value, src any) error {
 		return unmarshalStructFromMap(rv, m)
 
 	case reflect.Slice:
+		if b, ok := src.([]byte); ok && rv.Type().Elem().Kind() == reflect.Uint8 {
+			rv.SetBytes(b)
+			return nil
+		}
 		srcSlice, ok := src.([]any)
 		if !ok {
 			return fmt.Errorf("unmarshal: expected []any for slice, got %T", src)

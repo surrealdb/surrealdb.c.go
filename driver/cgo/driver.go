@@ -111,6 +111,8 @@ func valueToAny(v *surrealdbc.Value) any {
 			return v.AsString()
 		}
 		return t.UTC()
+	case surrealdbc.ValueBytes:
+		return v.AsBytes()
 	case surrealdbc.ValueGeometry:
 		return v.AsGeometry()
 	case surrealdbc.ValueThing:

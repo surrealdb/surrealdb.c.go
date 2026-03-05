@@ -115,6 +115,10 @@ func insertValue(obj *object, key string, fv reflect.Value) error {
 	case reflect.Float32, reflect.Float64:
 		obj.insertFloat(key, fv.Float())
 	case reflect.Slice:
+		if fv.Type().Elem().Kind() == reflect.Uint8 {
+			obj.insertBytes(key, fv.Bytes())
+			return nil
+		}
 		elems := make([]*C.sr_value_t, fv.Len())
 		for i := 0; i < fv.Len(); i++ {
 			v, err := scalarToCValue(fv.Index(i))

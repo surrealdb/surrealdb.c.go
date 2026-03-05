@@ -41,8 +41,6 @@ type InteropObj struct {
 // InteropRecord covers the SurrealDB data types that both the CGo and
 // pure-Go drivers can round-trip identically through Query[T].
 //
-// Excluded types (drivers produce different raw Go types):
-//   - bytes     — C driver returns tag name, Go SDK returns []byte
 type InteropRecord struct {
 	ID       string                     `cbor:"id"`
 	BoolT    bool                       `cbor:"bool_t"`
@@ -71,6 +69,7 @@ type InteropRecord struct {
 	Point    surrealdb.GeometryPoint   `cbor:"point_val"`
 	ObjMap   map[string]string        `cbor:"obj_map"`
 	ObjTyped InteropObj              `cbor:"obj_typed"`
+	BytesVal []byte                   `cbor:"bytes_val"`
 }
 
 // interopCreateSQL populates the record using SurrealQL type-cast functions.
@@ -105,6 +104,7 @@ CREATE interop:test SET
     uuid_val  = <uuid> "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
     point_val = type::point([1.5, 2.5]),
     obj_map   = { x: type::string("one"), y: type::string("two"), z: type::string("three") },
+    bytes_val = <bytes> "test",
     obj_typed = {
         i64: type::int("9007199254740992"),
         i32: type::int("2147483647"),
@@ -157,6 +157,7 @@ func interopContentVars() map[string]any {
 			"uuid_val":  "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
 			"point_val": surrealdb.GeometryPoint{Longitude: 1.5, Latitude: 2.5},
 			"obj_map": map[string]string{"x": "one", "y": "two", "z": "three"},
+			"bytes_val": []byte("test"),
 			"obj_typed": map[string]any{
 				"i64": int64(9007199254740992),
 				"i32": int64(2147483647),
@@ -203,6 +204,7 @@ type InteropContent struct {
 	Point    surrealdb.GeometryPoint   `cbor:"point_val"`
 	ObjMap   map[string]string        `cbor:"obj_map"`
 	ObjTyped InteropObj              `cbor:"obj_typed"`
+	BytesVal []byte                   `cbor:"bytes_val"`
 }
 
 // interopContentStruct returns an InteropContent struct wrapped for the
@@ -236,6 +238,7 @@ func interopContentStruct() map[string]any {
 			UuidVal:  "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
 			Point:    surrealdb.GeometryPoint{Longitude: 1.5, Latitude: 2.5},
 			ObjMap: map[string]string{"x": "one", "y": "two", "z": "three"},
+			BytesVal: []byte("test"),
 			ObjTyped: InteropObj{
 				I64: 9007199254740992,
 				I32: 2147483647,

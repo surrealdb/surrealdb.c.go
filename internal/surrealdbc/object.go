@@ -80,6 +80,19 @@ func (o *object) insertThing(key, table, id string) {
 	freeCString(cID)
 }
 
+func (o *object) insertBytes(key string, data []byte) {
+	cKey := cstring(key)
+	var cVal *C.sr_value_t
+	if len(data) > 0 {
+		cVal = C.sr_value_bytes((*C.uint8_t)(unsafe.Pointer(&data[0])), C.int(len(data)))
+	} else {
+		cVal = C.sr_value_bytes(nil, 0)
+	}
+	C.sr_object_insert(&o.c, cKey, cVal)
+	C.sr_value_free(cVal)
+	freeCString(cKey)
+}
+
 func (o *object) insertPoint(key string, x, y float64) {
 	cKey := cstring(key)
 	cVal := C.sr_value_point(C.double(x), C.double(y))
