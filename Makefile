@@ -1,5 +1,5 @@
-# To build/test against a local surrealdb.c fork:
-#   make test SURREALDB_C_DIR=~/src/surrealdb.c
+# To build/test against a local surrealdb.c fork (use absolute path, not ~):
+#   make test SURREALDB_C_DIR=/path/to/surrealdb.c
 # If the library is already built there, cargo build is skipped automatically.
 SURREALDB_C_REPO ?= https://github.com/surrealdb/surrealdb.c.git
 SURREALDB_C_REF  ?= main
@@ -25,7 +25,14 @@ ifneq ($(SURREALDB_C_DIR),build/surrealdb.c)
   endif
 endif
 
-export CGO_LDFLAGS  := -L$(CURDIR)/$(SURREALDB_C_LIBDIR)
+# Resolve SURREALDB_C_LIBDIR to an absolute path for CGO_LDFLAGS.
+# Paths starting with / are already absolute; relative paths get $(CURDIR)/ prepended.
+ifeq ($(filter /%,$(SURREALDB_C_LIBDIR)),)
+  _SURREALDB_C_LIBDIR_ABS = $(CURDIR)/$(SURREALDB_C_LIBDIR)
+else
+  _SURREALDB_C_LIBDIR_ABS = $(SURREALDB_C_LIBDIR)
+endif
+export CGO_LDFLAGS  := -L$(_SURREALDB_C_LIBDIR_ABS)
 
 # Rocksdb-enabled build uses a separate --target-dir so it doesn't
 # overwrite the default (mem + surrealkv) library.
