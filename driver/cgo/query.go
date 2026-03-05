@@ -1,4 +1,4 @@
-package surrealdbc
+package cgo
 
 // #include "surrealdb.h"
 import "C"
@@ -6,18 +6,18 @@ import "C"
 import (
 	"context"
 	"fmt"
+
+	"github.com/surrealdb/surrealdb.c.go/driver"
 )
 
 // Query executes a SurrealQL query, automatically marshaling vars.
-//
-// vars may be nil, a struct (with `cbor:"..."` tags), or map[string]any.
-func (c *Conn) Query(ctx context.Context, sql string, vars any) ([]QueryResult, error) {
+func (c *Conn) Query(ctx context.Context, sql string, vars any) ([]driver.QueryResult, error) {
 	obj, err := marshalVars(vars)
 	if err != nil {
 		return nil, fmt.Errorf("marshal query vars: %w", err)
 	}
 
-	return runWithSem(ctx, c.sem, func() ([]QueryResult, error) {
+	return runWithSem(ctx, c.sem, func() ([]driver.QueryResult, error) {
 		if obj != nil {
 			defer obj.Free()
 		}
@@ -25,7 +25,7 @@ func (c *Conn) Query(ctx context.Context, sql string, vars any) ([]QueryResult, 
 	}, nil)
 }
 
-func (c *Conn) rawQuery(sql string, vars *object) ([]QueryResult, error) {
+func (c *Conn) rawQuery(sql string, vars *object) ([]driver.QueryResult, error) {
 	cSQL := cstring(sql)
 	defer freeCString(cSQL)
 

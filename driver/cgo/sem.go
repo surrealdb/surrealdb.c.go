@@ -1,13 +1,7 @@
-package surrealdbc
+package cgo
 
 import "context"
 
-// runWithSem runs work in a goroutine gated by sem, respecting ctx cancellation.
-//
-// If ctx is cancelled while waiting for a semaphore slot, ctx.Err() is returned
-// immediately without starting work. If ctx is cancelled after work starts but
-// before it completes, the goroutine finishes in the background, releases the
-// semaphore slot, and calls cleanup (if non-nil and work succeeded).
 func runWithSem[T any](ctx context.Context, sem chan struct{}, work func() (T, error), cleanup func(T)) (T, error) {
 	var zero T
 

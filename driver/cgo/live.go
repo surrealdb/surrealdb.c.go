@@ -1,4 +1,4 @@
-package surrealdbc
+package cgo
 
 // #include "surrealdb.h"
 import "C"
@@ -11,47 +11,41 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/surrealdb/surrealdb.c.go/driver"
 )
 
-// Action represents the type of change in a live query notification.
-type Action int
+type action int
 
 const (
-	ActionCreate        Action = C.SR_ACTION_CREATE
-	ActionUpdate        Action = C.SR_ACTION_UPDATE
-	ActionDelete        Action = C.SR_ACTION_DELETE
-	ActionUnimplemented Action = C.SR_ACTION_UNIMPLEMENTED
+	actionCreate        action = C.SR_ACTION_CREATE
+	actionUpdate        action = C.SR_ACTION_UPDATE
+	actionDelete        action = C.SR_ACTION_DELETE
+	actionUnimplemented action = C.SR_ACTION_UNIMPLEMENTED
 )
 
-func (a Action) String() string {
+func (a action) String() string {
 	switch a {
-	case ActionCreate:
+	case actionCreate:
 		return "CREATE"
-	case ActionUpdate:
+	case actionUpdate:
 		return "UPDATE"
-	case ActionDelete:
+	case actionDelete:
 		return "DELETE"
 	default:
 		return "UNIMPLEMENTED"
 	}
 }
 
-// Notification is a live query event received from the database.
-type Notification struct {
-	QueryID string
-	Action  Action
-	Data    Value
-}
-
 // LiveHandle is a handle to an active live query session.
 type LiveHandle struct {
 	ID         string
-	Ch         <-chan Notification
+	Ch         <-chan driver.Notification
 	stream     *C.sr_stream_t
 	resource   string
 	done       chan struct{}
 	stopping   atomic.Bool
-	srvQueryID atomic.Value // string — server-side query UUID
+	srvQueryID atomic.Value
 }
 
 func uuidToString(b [16]C.uint8_t) string {
@@ -63,11 +57,11 @@ func uuidToString(b [16]C.uint8_t) string {
 	return fmt.Sprintf("%s-%s-%s-%s-%s", h[0:8], h[8:12], h[12:16], h[16:20], h[20:32])
 }
 
-func extractNotification(cn *C.sr_notification_t) Notification {
-	return Notification{
+func extractNotification(cn *C.sr_notification_t) driver.Notification {
+	return driver.Notification{
 		QueryID: uuidToString(cn.query_id._0),
-		Action:  Action(cn.action),
-		Data:    extractValue(&cn.data),
+		Action:  action(cn.action).String(),
+		Data:    extractAny(&cn.data),
 	}
 }
 
@@ -103,8 +97,6 @@ func (m *liveQueryMap) remove(id string) (*LiveHandle, bool) {
 	return lq, ok
 }
 
-// closeAll kills all active live query sessions. Must be called before
-// sr_surreal_disconnect so the stream pointers are still valid.
 func (m *liveQueryMap) closeAll(c *Conn) {
 	m.mu.Lock()
 	sessions := make([]*LiveHandle, 0, len(m.sessions))
@@ -150,8 +142,7 @@ func killServerSide(c *Conn, lq *LiveHandle) {
 	}
 }
 
-// Live creates a live query on the given resource (table name) and returns
-// a LiveHandle whose Ch channel receives notifications as they arrive.
+// Live creates a live query on the given resource.
 func (c *Conn) Live(ctx context.Context, resource string) (*LiveHandle, error) {
 	return runWithSem(ctx, c.sem, func() (*LiveHandle, error) {
 		cRes := cstring(resource)
@@ -164,7 +155,7 @@ func (c *Conn) Live(ctx context.Context, resource string) (*LiveHandle, error) {
 			return nil, err
 		}
 
-		ch := make(chan Notification, 64)
+		ch := make(chan driver.Notification, 64)
 		done := make(chan struct{})
 		lq := &LiveHandle{
 			ID:       generateID(),
@@ -209,7 +200,7 @@ func (c *Conn) Live(ctx context.Context, resource string) (*LiveHandle, error) {
 	})
 }
 
-// Kill stops a live query session and frees its resources.
+// Kill stops a live query session.
 func (c *Conn) Kill(lq *LiveHandle) {
 	if lq, ok := c.live.remove(lq.ID); ok {
 		lq.stopping.Store(true)

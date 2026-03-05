@@ -1,10 +1,9 @@
-package surrealdbc
+package cgo
 
 /*
 #include "surrealdb.h"
 
 // Builds an sr_value_t array from an array of value pointers.
-// Caller must free each element and the values array separately.
 static struct sr_value_t *build_array(struct sr_value_t **values, int count) {
     struct sr_value_t *arr_val = sr_value_array();
     for (int i = 0; i < count; i++) {

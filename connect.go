@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/surrealdb/surrealdb.c.go/driver/cgo"
-	"github.com/surrealdb/surrealdb.c.go/internal/surrealdbc"
 )
 
 // Open connects to a SurrealDB instance at the given endpoint.
@@ -52,7 +51,7 @@ func schemeOf(endpoint string) string {
 }
 
 func openEmbedded(ctx context.Context, endpoint string, cfg openConfig) (Driver, error) {
-	sdbCfg := surrealdbc.DefaultConfig()
+	sdbCfg := cgo.DefaultConfig()
 	sdbCfg.MaxPendingOps = cfg.maxPendingOps
 	return cgo.New(ctx, endpoint, sdbCfg)
 }

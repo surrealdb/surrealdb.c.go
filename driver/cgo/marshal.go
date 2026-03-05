@@ -1,4 +1,4 @@
-package surrealdbc
+package cgo
 
 // #include "surrealdb.h"
 import "C"

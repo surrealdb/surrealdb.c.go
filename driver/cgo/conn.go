@@ -1,6 +1,4 @@
-// Package surrealdbc provides the CGO binding layer for the SurrealDB C library.
-// This is an internal package — use the parent surrealdb package instead.
-package surrealdbc
+package cgo
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/../..
@@ -31,7 +29,6 @@ func DefaultConfig() Config {
 }
 
 // Conn is an open connection to a SurrealDB instance.
-// It wraps the C sr_surreal_t pointer and is safe to use from multiple goroutines.
 type Conn struct {
 	c    *C.sr_surreal_t
 	live *liveQueryMap
@@ -59,26 +56,6 @@ func cstring(s string) *C.char {
 
 func freeCString(p *C.char) {
 	C.free(unsafe.Pointer(p))
-}
-
-// Version returns the SurrealDB engine version string.
-func (c *Conn) Version() (string, error) {
-	var errPtr C.sr_string_t
-	var ver C.sr_string_t
-	rc := C.sr_version(c.c, &errPtr, &ver)
-	if err := surrealError(rc, errPtr); err != nil {
-		return "", err
-	}
-	s := C.GoString(ver)
-	C.sr_free_string(ver)
-	return s, nil
-}
-
-// Health checks whether the database connection is healthy.
-func (c *Conn) Health() error {
-	var errPtr C.sr_string_t
-	rc := C.sr_health(c.c, &errPtr)
-	return surrealError(rc, errPtr)
 }
 
 // Close disconnects from the database and releases all resources.
