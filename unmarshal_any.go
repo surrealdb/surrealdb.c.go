@@ -103,6 +103,10 @@ func setFromAny(rv reflect.Value, src any) error {
 			rv.SetBytes(b)
 			return nil
 		}
+		if srcRV := reflect.ValueOf(src); srcRV.Type().AssignableTo(rv.Type()) {
+			rv.Set(srcRV)
+			return nil
+		}
 		srcSlice, ok := src.([]any)
 		if !ok {
 			return fmt.Errorf("unmarshal: expected []any for slice, got %T", src)

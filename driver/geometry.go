@@ -7,3 +7,7 @@ type GeometryPoint struct {
 	Longitude float64
 	Latitude  float64
 }
+
+// GeometryLine is the Go representation of a SurrealDB geometry line
+// (LineString). It is an ordered sequence of points.
+type GeometryLine []GeometryPoint

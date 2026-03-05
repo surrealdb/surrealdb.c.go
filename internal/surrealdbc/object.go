@@ -101,6 +101,19 @@ func (o *object) insertPoint(key string, x, y float64) {
 	freeCString(cKey)
 }
 
+func (o *object) insertLineString(key string, coords []C.sr_sr_g_coord) {
+	cKey := cstring(key)
+	var cVal *C.sr_value_t
+	if len(coords) > 0 {
+		cVal = C.sr_value_linestring(&coords[0], C.int(len(coords)))
+	} else {
+		cVal = C.sr_value_linestring(nil, 0)
+	}
+	C.sr_object_insert(&o.c, cKey, cVal)
+	C.sr_value_free(cVal)
+	freeCString(cKey)
+}
+
 func (o *object) insertNull(key string) {
 	cKey := cstring(key)
 	cVal := C.sr_value_null()

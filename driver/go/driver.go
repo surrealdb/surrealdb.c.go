@@ -24,6 +24,7 @@ var (
 	timeDurationType  = reflect.TypeOf(time.Duration(0))
 	timeTimeType      = reflect.TypeOf(time.Time{})
 	geometryPointType = reflect.TypeOf(driver.GeometryPoint{})
+	geometryLineType  = reflect.TypeOf(driver.GeometryLine{})
 )
 
 func init() {
@@ -175,6 +176,16 @@ func fieldToAny(fv reflect.Value) any {
 			m[iter.Key().String()] = iter.Value().Interface()
 		}
 		return m
+	case reflect.Slice:
+		if fv.Type() == geometryLineType {
+			line := fv.Interface().(driver.GeometryLine)
+			mLine := make(models.GeometryLine, len(line))
+			for i, pt := range line {
+				mLine[i] = models.GeometryPoint{Longitude: pt.Longitude, Latitude: pt.Latitude}
+			}
+			return mLine
+		}
+		return fv.Interface()
 	default:
 		if fv.Type() == timeDurationType {
 			return &models.CustomDuration{Duration: time.Duration(fv.Int())}
@@ -206,6 +217,12 @@ func normalizeValue(v any) any {
 			return nil
 		}
 		return driver.GeometryPoint{Longitude: val.Longitude, Latitude: val.Latitude}
+	case models.GeometryLine:
+		line := make(driver.GeometryLine, len(val))
+		for i, pt := range val {
+			line[i] = driver.GeometryPoint{Longitude: pt.Longitude, Latitude: pt.Latitude}
+		}
+		return line
 	case models.DecimalString:
 		return string(val)
 	case models.UUID:
@@ -259,6 +276,12 @@ func denormalizeValue(v any) any {
 			out[i] = denormalizeValue(elem)
 		}
 		return out
+	case driver.GeometryLine:
+		mLine := make(models.GeometryLine, len(val))
+		for i, pt := range val {
+			mLine[i] = models.GeometryPoint{Longitude: pt.Longitude, Latitude: pt.Latitude}
+		}
+		return mLine
 	default:
 		rv := reflect.ValueOf(v)
 		if rv.Kind() == reflect.Struct {

@@ -16,6 +16,7 @@ var (
 	timeDurationType  = reflect.TypeOf(time.Duration(0))
 	timeTimeType      = reflect.TypeOf(time.Time{})
 	geometryPointType = reflect.TypeOf(driver.GeometryPoint{})
+	geometryLineType  = reflect.TypeOf(driver.GeometryLine{})
 )
 
 func marshalVars(v any) (*object, error) {
@@ -100,6 +101,15 @@ func insertValue(obj *object, key string, fv reflect.Value) error {
 	if fv.Type() == geometryPointType {
 		pt := fv.Interface().(driver.GeometryPoint)
 		obj.insertPoint(key, pt.Longitude, pt.Latitude)
+		return nil
+	}
+	if fv.Type() == geometryLineType {
+		line := fv.Interface().(driver.GeometryLine)
+		coords := make([]C.sr_sr_g_coord, len(line))
+		for i, pt := range line {
+			coords[i] = C.sr_sr_g_coord{x: C.double(pt.Longitude), y: C.double(pt.Latitude)}
+		}
+		obj.insertLineString(key, coords)
 		return nil
 	}
 

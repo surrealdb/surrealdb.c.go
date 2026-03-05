@@ -67,9 +67,10 @@ type InteropRecord struct {
 	DecNeg   surrealdb.Decimal          `cbor:"dec_neg"`
 	UuidVal  surrealdb.UUID             `cbor:"uuid_val"`
 	Point    surrealdb.GeometryPoint   `cbor:"point_val"`
-	ObjMap   map[string]string        `cbor:"obj_map"`
-	ObjTyped InteropObj              `cbor:"obj_typed"`
-	BytesVal []byte                   `cbor:"bytes_val"`
+	Line     surrealdb.GeometryLine    `cbor:"line_val"`
+	ObjMap   map[string]string         `cbor:"obj_map"`
+	ObjTyped InteropObj                `cbor:"obj_typed"`
+	BytesVal []byte                    `cbor:"bytes_val"`
 }
 
 // interopCreateSQL populates the record using SurrealQL type-cast functions.
@@ -103,6 +104,10 @@ CREATE interop:test SET
     dec_neg   = <decimal> -0.001,
     uuid_val  = <uuid> "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
     point_val = type::point([1.5, 2.5]),
+    line_val  = {
+        type: "LineString",
+        coordinates: [[0.0, 0.0], [1.0, 1.0], [2.0, 0.0]]
+    },
     obj_map   = { x: type::string("one"), y: type::string("two"), z: type::string("three") },
     bytes_val = <bytes> "test",
     obj_typed = {
@@ -156,6 +161,11 @@ func interopContentVars() map[string]any {
 			"dec_neg":  "-0.001",
 			"uuid_val":  "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
 			"point_val": surrealdb.GeometryPoint{Longitude: 1.5, Latitude: 2.5},
+			"line_val": surrealdb.GeometryLine{
+				{Longitude: 0, Latitude: 0},
+				{Longitude: 1, Latitude: 1},
+				{Longitude: 2, Latitude: 0},
+			},
 			"obj_map": map[string]string{"x": "one", "y": "two", "z": "three"},
 			"bytes_val": []byte("test"),
 			"obj_typed": map[string]any{
@@ -202,9 +212,10 @@ type InteropContent struct {
 	DecNeg   surrealdb.Decimal          `cbor:"dec_neg"`
 	UuidVal  surrealdb.UUID             `cbor:"uuid_val"`
 	Point    surrealdb.GeometryPoint   `cbor:"point_val"`
-	ObjMap   map[string]string        `cbor:"obj_map"`
-	ObjTyped InteropObj              `cbor:"obj_typed"`
-	BytesVal []byte                   `cbor:"bytes_val"`
+	Line     surrealdb.GeometryLine    `cbor:"line_val"`
+	ObjMap   map[string]string         `cbor:"obj_map"`
+	ObjTyped InteropObj                `cbor:"obj_typed"`
+	BytesVal []byte                    `cbor:"bytes_val"`
 }
 
 // interopContentStruct returns an InteropContent struct wrapped for the
@@ -236,7 +247,12 @@ func interopContentStruct() map[string]any {
 			DecVal:   "99.99",
 			DecNeg:   "-0.001",
 			UuidVal:  "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
-			Point:    surrealdb.GeometryPoint{Longitude: 1.5, Latitude: 2.5},
+			Point: surrealdb.GeometryPoint{Longitude: 1.5, Latitude: 2.5},
+			Line: surrealdb.GeometryLine{
+				{Longitude: 0, Latitude: 0},
+				{Longitude: 1, Latitude: 1},
+				{Longitude: 2, Latitude: 0},
+			},
 			ObjMap: map[string]string{"x": "one", "y": "two", "z": "three"},
 			BytesVal: []byte("test"),
 			ObjTyped: InteropObj{

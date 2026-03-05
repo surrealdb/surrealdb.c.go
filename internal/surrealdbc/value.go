@@ -238,9 +238,27 @@ func extractGeometry(geom *C.sr_sr_geometry) any {
 			Longitude: float64(pt._0.x),
 			Latitude:  float64(pt._0.y),
 		}
+	case C.sr_g_linestring:
+		ls := (*C.sr_sr_g_linestring)(unsafe.Pointer(&geom.anon0))
+		return extractLineString(ls)
 	default:
 		return nil
 	}
+}
+
+func extractLineString(ls *C.sr_sr_g_linestring) driver.GeometryLine {
+	n := int(ls._0.len)
+	line := make(driver.GeometryLine, n)
+	for i := 0; i < n; i++ {
+		coord := (*C.sr_sr_g_coord)(unsafe.Pointer(
+			uintptr(unsafe.Pointer(ls._0.ptr)) + uintptr(i)*unsafe.Sizeof(C.sr_sr_g_coord{}),
+		))
+		line[i] = driver.GeometryPoint{
+			Longitude: float64(coord.x),
+			Latitude:  float64(coord.y),
+		}
+	}
+	return line
 }
 
 func extractObject(cobj *C.sr_object_t) []KV {
