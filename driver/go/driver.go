@@ -31,6 +31,17 @@ func init() {
 	surrealdb.RegisterRemoteDriver(openRemote)
 }
 
+// Register explicitly registers the pure Go remote driver.
+// This is an alternative to the blank import:
+//
+//	import _ "github.com/surrealdb/surrealdb.c.go/driver/go"
+//
+// Useful when you want to conditionally enable the Go driver at runtime
+// (e.g. in tests) rather than at import time.
+func Register() {
+	surrealdb.RegisterRemoteDriver(openRemote)
+}
+
 func openRemote(ctx context.Context, endpoint string) (driver.Driver, error) {
 	goDb, err := surrealdbgo.FromEndpointURLString(ctx, endpoint)
 	if err != nil {

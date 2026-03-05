@@ -1,9 +1,13 @@
 # To build/test against a local surrealdb.c fork (use absolute path, not ~):
 #   make test SURREALDB_C_DIR=/path/to/surrealdb.c
 # If the library is already built there, cargo build is skipped automatically.
-SURREALDB_C_REPO ?= https://github.com/surrealdb/surrealdb.c.git
-SURREALDB_C_REF  ?= main
-SURREALDB_C_DIR  ?= build/surrealdb.c
+#
+# To enable extra surrealdb crate features (e.g. ws protocol):
+#   make test SURREALDB_C_FEATURES="protocol-ws"
+SURREALDB_C_REPO     ?= https://github.com/surrealdb/surrealdb.c.git
+SURREALDB_C_REF      ?= main
+SURREALDB_C_DIR      ?= build/surrealdb.c
+SURREALDB_C_FEATURES ?=
 
 # When CARGO_BUILD_TARGET is set (e.g. aarch64-apple-darwin), cargo places
 # artifacts under target/$(CARGO_BUILD_TARGET)/release instead of
@@ -77,7 +81,14 @@ $(SURREALDB_C_DIR)/Cargo.toml:
 	git clone --depth 1 --branch $(SURREALDB_C_REF) $(SURREALDB_C_REPO) $(SURREALDB_C_DIR)
 
 $(SURREALDB_C_LIB): $(SURREALDB_C_DIR)/Cargo.toml
-	cd $(SURREALDB_C_DIR) && cargo build --release || { $(CURDIR)/scripts/diagnose-build.sh; exit 1; }
+ifneq ($(SURREALDB_C_FEATURES),)
+	@grep -q '\[features\]' $(SURREALDB_C_DIR)/Cargo.toml || printf '\n[features]\n' >> $(SURREALDB_C_DIR)/Cargo.toml
+	@for f in $(SURREALDB_C_FEATURES); do \
+		grep -q "^$$f " $(SURREALDB_C_DIR)/Cargo.toml || \
+		printf '%s = ["surrealdb/%s"]\n' "$$f" "$$f" >> $(SURREALDB_C_DIR)/Cargo.toml; \
+	done
+endif
+	cd $(SURREALDB_C_DIR) && cargo build --release $(if $(SURREALDB_C_FEATURES),--features "$(SURREALDB_C_FEATURES)") || { $(CURDIR)/scripts/diagnose-build.sh; exit 1; }
 	cp $(SURREALDB_C_INCLUDE)/surrealdb.h surrealdb.h
 
 $(SURREALDB_C_DIR)/.features-patched: $(SURREALDB_C_DIR)/Cargo.toml
@@ -95,7 +106,7 @@ $(SURREALDB_C_DIR)/.features-patched: $(SURREALDB_C_DIR)/Cargo.toml
 	@test -f $(SURREALDB_C_LIB) && touch $(SURREALDB_C_LIB) || true
 
 $(SURREALDB_C_ROCKSDB_LIB): $(SURREALDB_C_DIR)/.features-patched
-	cd $(SURREALDB_C_DIR) && cargo build --release --features kv-rocksdb --target-dir target-rocksdb || { $(CURDIR)/scripts/diagnose-build.sh; exit 1; }
+	cd $(SURREALDB_C_DIR) && cargo build --release --features "kv-rocksdb $(SURREALDB_C_FEATURES)" --target-dir target-rocksdb || { $(CURDIR)/scripts/diagnose-build.sh; exit 1; }
 	cp $(SURREALDB_C_INCLUDE)/surrealdb.h surrealdb.h
 
 else

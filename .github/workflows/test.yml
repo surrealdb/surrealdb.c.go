@@ -13,6 +13,8 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
+        surrealdb-version: [v2, v3.0.1]
+        remote-driver: [go, cgo]
     steps:
       - uses: actions/checkout@v6
 
@@ -22,4 +24,12 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - run: make test
+      - name: Pull SurrealDB Docker image
+        run: docker pull surrealdb/surrealdb:${{ matrix.surrealdb-version }}
+
+      - name: Run tests
+        env:
+          SURREALDB_IMAGE_TAG: ${{ matrix.surrealdb-version }}
+          SURREALDB_REMOTE_DRIVER: ${{ matrix.remote-driver }}
+          SURREALDB_C_FEATURES: ${{ matrix.remote-driver == 'cgo' && 'protocol-ws' || '' }}
+        run: make test

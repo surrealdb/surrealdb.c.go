@@ -11,13 +11,11 @@ import (
 // Open connects to a SurrealDB instance at the given endpoint.
 //
 // The scheme determines which backend is used:
-//   - "mem://", "surrealkv://...", "rocksdb://..." — embedded C backend (requires CGo + libsurrealdb_c)
-//   - "ws://...", "wss://...", "http://...", "https://..." — remote backend via a registered driver
-//
-// Remote schemes require a driver to be registered first, typically via a
-// blank import:
-//
-//	import _ "github.com/surrealdb/surrealdb.c.go/driver/go"
+//   - "mem://", "surrealkv://...", "rocksdb://..." — always uses the C backend
+//   - "ws://", "wss://", "http://", "https://" — uses a registered remote
+//     driver (e.g. import _ ".../driver/go"), or falls back to the C backend
+//     if no remote driver is registered (requires the corresponding protocol
+//     feature to be enabled when building libsurrealdb_c)
 //
 // The context controls the connection timeout. The caller must call Close
 // on the returned Driver when done.
@@ -33,11 +31,10 @@ func Open(ctx context.Context, endpoint string, opts ...Option) (Driver, error) 
 	case "mem", "surrealkv", "rocksdb", "file":
 		return openEmbedded(ctx, endpoint, cfg)
 	case "ws", "wss", "http", "https":
-		opener := getRemoteDriver()
-		if opener == nil {
-			return nil, fmt.Errorf("surrealdb: no remote driver registered for scheme %q; import _ \"github.com/surrealdb/surrealdb.c.go/driver/go\" to enable", scheme)
+		if opener := getRemoteDriver(); opener != nil {
+			return opener(ctx, endpoint)
 		}
-		return opener(ctx, endpoint)
+		return openEmbedded(ctx, endpoint, cfg)
 	default:
 		return nil, fmt.Errorf("surrealdb: unsupported scheme %q in endpoint %q", scheme, endpoint)
 	}

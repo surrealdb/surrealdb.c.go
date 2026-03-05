@@ -3,6 +3,7 @@ package surrealdb_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -322,17 +323,43 @@ var populators = []recordPopulator{
 }
 
 func TestInteropTypes(t *testing.T) {
-	wsURL := startSurrealDBContainer(t)
-
-	endpoints := []struct {
-		name     string
-		endpoint string
-	}{
-		{"cgo", "mem://"},
-		{"go", wsURL},
+	// SURREALDB_REMOTE_DRIVER controls which driver handles ws:// endpoints:
+	//   "go"  (default) — pure Go SDK via driver/go
+	//   "cgo"           — C backend (requires protocol-ws feature at build time)
+	remoteMode := os.Getenv("SURREALDB_REMOTE_DRIVER")
+	if remoteMode == "" {
+		remoteMode = "go"
 	}
 
-	// Collect results for all 4 combinations, then cross-compare.
+	// Start the Docker container while the Go driver is still registered
+	// (waitForReady needs a working ws:// connection to health-check).
+	wsURL := startSurrealDBContainer(t)
+
+	if remoteMode == "cgo" {
+		surrealdb.UnregisterRemoteDriver()
+		t.Log("remote driver: cgo (Go driver unregistered)")
+
+		// The C backend must be able to handle ws://. This requires
+		// protocol-ws to be enabled when building libsurrealdb_c:
+		//   make test SURREALDB_C_FEATURES="protocol-ws" SURREALDB_REMOTE_DRIVER=cgo
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		db, err := surrealdb.Open(ctx, wsURL)
+		cancel()
+		require.NoError(t, err, "C backend cannot connect to %s — build surrealdb.c with protocol-ws feature", wsURL)
+		db.Close()
+	} else {
+		t.Log("remote driver: go")
+	}
+
+	type endpoint struct {
+		name     string
+		endpoint string
+	}
+	endpoints := []endpoint{
+		{"cgo", "mem://"},
+		{remoteMode, wsURL},
+	}
+
 	results := make(map[string]InteropRecord)
 	for _, ep := range endpoints {
 		for _, pop := range populators {
@@ -344,8 +371,13 @@ func TestInteropTypes(t *testing.T) {
 		}
 	}
 
-	// All 6 results should be identical.
-	keys := []string{"cgo/sql", "cgo/map", "cgo/struct", "go/sql", "go/map", "go/struct"}
+	// All results should be identical regardless of driver and populator.
+	var keys []string
+	for _, ep := range endpoints {
+		for _, pop := range populators {
+			keys = append(keys, ep.name+"/"+pop.name)
+		}
+	}
 	for i := 1; i < len(keys); i++ {
 		assert.Equal(t, results[keys[0]], results[keys[i]],
 			"%s and %s should produce identical results", keys[0], keys[i])

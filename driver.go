@@ -45,6 +45,15 @@ func RegisterRemoteDriver(opener RemoteOpener) {
 	remoteDriver = opener
 }
 
+// UnregisterRemoteDriver removes the registered remote driver, causing
+// ws/http endpoints to fall through to the C backend. Useful in tests
+// to verify the C backend handles remote protocols directly.
+func UnregisterRemoteDriver() {
+	remoteDriverMu.Lock()
+	defer remoteDriverMu.Unlock()
+	remoteDriver = nil
+}
+
 func getRemoteDriver() RemoteOpener {
 	remoteDriverMu.RLock()
 	defer remoteDriverMu.RUnlock()
