@@ -54,6 +54,7 @@ type InteropRecord struct {
 	Str      string                     `cbor:"str_val"`
 	StrEmpty string                     `cbor:"str_empty"`
 	NullVal  any                        `cbor:"null_val"`
+	NoneVal  any                        `cbor:"none_val"`
 	ArrInt   []int64                    `cbor:"arr_int"`
 	ArrStr   []string                   `cbor:"arr_str"`
 	ArrBool  []bool                     `cbor:"arr_bool"`
@@ -87,6 +88,7 @@ CREATE interop:test SET
     str_val   = type::string("hello world"),
     str_empty = type::string(""),
     null_val  = NULL,
+    none_val  = NONE,
     arr_int   = [type::int("1"), type::int("2"), type::int("3")],
     arr_str   = [type::string("a"), type::string("b"), type::string("c")],
     arr_bool  = [type::bool("true"), type::bool("false"), type::bool("true")],
@@ -199,6 +201,7 @@ type InteropContent struct {
 	Str      string                     `cbor:"str_val"`
 	StrEmpty string                     `cbor:"str_empty"`
 	NullVal  any                        `cbor:"null_val"`
+	NoneVal  any                        `cbor:"none_val"`
 	ArrInt   []int64                    `cbor:"arr_int"`
 	ArrStr   []string                   `cbor:"arr_str"`
 	ArrBool  []bool                     `cbor:"arr_bool"`
