@@ -18,10 +18,9 @@ import (
 type action int
 
 const (
-	actionCreate        action = C.SR_ACTION_CREATE
-	actionUpdate        action = C.SR_ACTION_UPDATE
-	actionDelete        action = C.SR_ACTION_DELETE
-	actionUnimplemented action = C.SR_ACTION_UNIMPLEMENTED
+	actionCreate action = C.SR_ACTION_CREATE
+	actionUpdate action = C.SR_ACTION_UPDATE
+	actionDelete action = C.SR_ACTION_DELETE
 )
 
 func (a action) String() string {

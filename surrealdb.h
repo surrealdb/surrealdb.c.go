@@ -24,11 +24,6 @@ typedef enum sr_action {
   SR_ACTION_CREATE,
   SR_ACTION_UPDATE,
   SR_ACTION_DELETE,
-  /**
-   * Represents an action type added in a newer version of SurrealDB
-   * that this C API version doesn't yet support
-   */
-  SR_ACTION_UNIMPLEMENTED,
 } sr_action;
 
 typedef struct sr_opaque_object_internal_t sr_opaque_object_internal_t;
