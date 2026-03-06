@@ -31,7 +31,7 @@ import (
 )
 
 type Person struct {
-    ID   string `cbor:"id"`
+    ID   string `cbor:"id,omitempty"`
     Name string `cbor:"name"`
     Age  int64  `cbor:"age"`
 }
@@ -46,7 +46,11 @@ func main() {
     defer db.Close()
 
     db.Use(ctx, "test", "test")
-    db.Query(ctx, `CREATE person:alice SET name = "Alice", age = 30`, nil)
+    db.Query(ctx, "DEFINE TABLE person SCHEMALESS", nil)
+    db.Query(ctx, "CREATE $rid CONTENT $content", map[string]any{
+        "rid":     surrealdb.NewRecordID("person", "alice"),
+        "content": Person{Name: "Alice", Age: 30},
+    })
 
     results, _ := surrealdb.Query[Person](ctx, db, "SELECT * FROM person", nil)
     for _, p := range results[0].Values() {

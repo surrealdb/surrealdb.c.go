@@ -51,12 +51,16 @@ func marshalStruct(rv reflect.Value) (*object, error) {
 			continue
 		}
 
-		key := fieldKey(field)
+		key, omitempty := parseFieldTag(field)
 		if key == "-" {
 			continue
 		}
 
 		fv := rv.Field(i)
+		if omitempty && isZeroValue(fv) {
+			continue
+		}
+
 		if err := insertValue(obj, key, fv); err != nil {
 			obj.Free()
 			return nil, fmt.Errorf("field %s: %w", field.Name, err)
@@ -65,15 +69,45 @@ func marshalStruct(rv reflect.Value) (*object, error) {
 	return obj, nil
 }
 
-func fieldKey(f reflect.StructField) string {
+func parseFieldTag(f reflect.StructField) (key string, omitempty bool) {
 	tag := f.Tag.Get("cbor")
-	if tag != "" {
-		if idx := strings.IndexByte(tag, ','); idx >= 0 {
-			tag = tag[:idx]
-		}
-		return tag
+	if tag == "" {
+		return strings.ToLower(f.Name), false
 	}
-	return strings.ToLower(f.Name)
+	if idx := strings.IndexByte(tag, ','); idx >= 0 {
+		omitempty = strings.Contains(tag[idx+1:], "omitempty")
+		tag = tag[:idx]
+	}
+	return tag, omitempty
+}
+
+func isZeroValue(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Bool:
+		return !v.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return v.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return v.Float() == 0
+	case reflect.String:
+		return v.String() == ""
+	case reflect.Slice, reflect.Map:
+		return v.IsNil() || v.Len() == 0
+	case reflect.Ptr, reflect.Interface:
+		return v.IsNil()
+	case reflect.Struct:
+		return reflect.DeepEqual(v.Interface(), reflect.Zero(v.Type()).Interface())
+	default:
+		return false
+	}
+}
+
+// fieldKey is kept for use by the unmarshal path which doesn't need omitempty.
+func fieldKey(f reflect.StructField) string {
+	key, _ := parseFieldTag(f)
+	return key
 }
 
 func insertValue(obj *object, key string, fv reflect.Value) error {

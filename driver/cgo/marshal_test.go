@@ -63,6 +63,39 @@ func TestMarshalMapVars(t *testing.T) {
 	}
 }
 
+func TestMarshalOmitempty(t *testing.T) {
+	type Record struct {
+		ID   string `cbor:"id,omitempty"`
+		Name string `cbor:"name"`
+		Age  int    `cbor:"age,omitempty"`
+	}
+
+	obj, err := marshalObject(Record{Name: "Alice"})
+	if err != nil {
+		t.Fatalf("marshalObject: %v", err)
+	}
+	defer obj.Free()
+
+	keys := obj.keys()
+	keySet := map[string]bool{}
+	for _, k := range keys {
+		keySet[k] = true
+	}
+
+	if keySet["id"] {
+		t.Error("id with omitempty and zero value should not be present")
+	}
+	if keySet["age"] {
+		t.Error("age with omitempty and zero value should not be present")
+	}
+	if !keySet["name"] {
+		t.Error("name without omitempty should be present")
+	}
+	if obj.len() != 1 {
+		t.Fatalf("expected 1 key, got %d (keys: %v)", obj.len(), keys)
+	}
+}
+
 func TestMarshalVarsNil(t *testing.T) {
 	obj, err := marshalVars(nil)
 	if err != nil {

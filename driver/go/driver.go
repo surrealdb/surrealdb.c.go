@@ -133,24 +133,58 @@ func structToMap(v any) (map[string]any, error) {
 		if !f.IsExported() {
 			continue
 		}
-		key := cborFieldKey(f)
+		key, omit := parseCborTag(f)
 		if key == "-" {
 			continue
 		}
-		m[key] = fieldToAny(rv.Field(i))
+		fv := rv.Field(i)
+		if omit && isGoZero(fv) {
+			continue
+		}
+		m[key] = fieldToAny(fv)
 	}
 	return m, nil
 }
 
-func cborFieldKey(f reflect.StructField) string {
+func parseCborTag(f reflect.StructField) (key string, omitempty bool) {
 	tag := f.Tag.Get("cbor")
-	if tag != "" {
-		if idx := strings.IndexByte(tag, ','); idx >= 0 {
-			tag = tag[:idx]
-		}
-		return tag
+	if tag == "" {
+		return strings.ToLower(f.Name), false
 	}
-	return strings.ToLower(f.Name)
+	if idx := strings.IndexByte(tag, ','); idx >= 0 {
+		omitempty = strings.Contains(tag[idx+1:], "omitempty")
+		tag = tag[:idx]
+	}
+	return tag, omitempty
+}
+
+func isGoZero(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Bool:
+		return !v.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return v.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return v.Float() == 0
+	case reflect.String:
+		return v.String() == ""
+	case reflect.Slice, reflect.Map:
+		return v.IsNil() || v.Len() == 0
+	case reflect.Ptr, reflect.Interface:
+		return v.IsNil()
+	case reflect.Struct:
+		return reflect.DeepEqual(v.Interface(), reflect.Zero(v.Type()).Interface())
+	default:
+		return false
+	}
+}
+
+// cborFieldKey is kept for callers that don't need omitempty.
+func cborFieldKey(f reflect.StructField) string {
+	key, _ := parseCborTag(f)
+	return key
 }
 
 func fieldToAny(fv reflect.Value) any {
@@ -173,8 +207,11 @@ func fieldToAny(fv reflect.Value) any {
 			if !f.IsExported() {
 				continue
 			}
-			key := cborFieldKey(f)
+			key, omit := parseCborTag(f)
 			if key == "-" {
+				continue
+			}
+			if omit && isGoZero(fv.Field(i)) {
 				continue
 			}
 			m[key] = fieldToAny(fv.Field(i))
