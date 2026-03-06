@@ -10,7 +10,7 @@ env:
   # Last surrealdb.c commit compatible with SurrealDB v2.
   SURREALDB_C_V2_REF: f962508
   # The surrealdb.c branch that supports Rust 1.94+
-  SURREALDB_C_V3_REF: rust-1.94
+  SURREALDB_C_V3_REF: main
 
 jobs:
   # Linux: full matrix with Docker (embedded + remote via go/cgo drivers)
