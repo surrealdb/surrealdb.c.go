@@ -1,6 +1,10 @@
 package cgo
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/surrealdb/surrealdb.c.go/driver"
+)
 
 func TestMarshalObjectFromStruct(t *testing.T) {
 	type Address struct {
@@ -65,9 +69,9 @@ func TestMarshalMapVars(t *testing.T) {
 
 func TestMarshalOmitempty(t *testing.T) {
 	type Record struct {
-		ID   string `cbor:"id,omitempty"`
-		Name string `cbor:"name"`
-		Age  int    `cbor:"age,omitempty"`
+		ID   driver.RecordID[string] `cbor:"id,omitempty"`
+		Name string                  `cbor:"name"`
+		Age  int                     `cbor:"age,omitempty"`
 	}
 
 	obj, err := marshalObject(Record{Name: "Alice"})

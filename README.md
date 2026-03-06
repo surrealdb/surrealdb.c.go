@@ -31,9 +31,9 @@ import (
 )
 
 type Person struct {
-    ID   string `cbor:"id,omitempty"`
-    Name string `cbor:"name"`
-    Age  int64  `cbor:"age"`
+    ID   surrealdb.RecordID[string] `cbor:"id,omitempty"`
+    Name string                     `cbor:"name"`
+    Age  int64                      `cbor:"age"`
 }
 
 func main() {
