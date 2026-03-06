@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  # Last surrealdb.c commit compatible with SurrealDB v2.
+  SURREALDB_C_V2_REF: 1625b5ce1694efd4056cca453dbcd03682497d8e
+
 jobs:
   # Linux: full matrix with Docker (embedded + remote via go/cgo drivers)
   test-linux:
@@ -15,14 +19,6 @@ jobs:
       matrix:
         surrealdb-version: [v2, v3.0.1]
         remote-driver: [go, cgo]
-        include:
-          # v2 jobs use the last surrealdb.c commit before v3 merge
-          - surrealdb-version: v2
-            remote-driver: go
-            surrealdb-c-ref: 1625b5ce1694efd4056cca453dbcd03682497d8e
-          - surrealdb-version: v2
-            remote-driver: cgo
-            surrealdb-c-ref: 1625b5ce1694efd4056cca453dbcd03682497d8e
     steps:
       - uses: actions/checkout@v6
 
@@ -40,10 +36,11 @@ jobs:
           SURREALDB_IMAGE_TAG: ${{ matrix.surrealdb-version }}
           SURREALDB_REMOTE_DRIVER: ${{ matrix.remote-driver }}
           SURREALDB_C_FEATURES: ${{ matrix.remote-driver == 'cgo' && 'protocol-ws' || '' }}
-          SURREALDB_C_REF: ${{ matrix.surrealdb-c-ref || 'main' }}
+          SURREALDB_C_REF: ${{ matrix.surrealdb-version == 'v2' && env.SURREALDB_C_V2_REF || 'main' }}
         run: make test
 
-  # macOS: embedded CGo tests only (no Docker)
+  # macOS: embedded CGo tests only (no Docker).
+  # Uses Makefile default (main).
   test-macos:
     runs-on: macos-latest
     steps:
