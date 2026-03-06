@@ -8,7 +8,7 @@ on:
 
 env:
   # Last surrealdb.c commit compatible with SurrealDB v2.
-  SURREALDB_C_V2_REF: 1625b5ce1694efd4056cca453dbcd03682497d8e
+  SURREALDB_C_V2_REF: f962508
   # The surrealdb.c branch that supports Rust 1.94+
   SURREALDB_C_V3_REF: rust-1.94
 
