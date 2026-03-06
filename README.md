@@ -2,8 +2,9 @@
 
 Go bindings for embedded SurrealDB via the [surrealdb.c](https://github.com/surrealdb/surrealdb.c) C FFI library.
 
-> **Compatibility:** Currently tested with **SurrealDB 2.4.1** (the surrealdb.c
-> library is locked to this version). Support for v3 is coming soon.
+> **Compatibility:** Tested with **SurrealDB v2** and **v3**. CI runs the full
+> test suite against both versions. The surrealdb.c library defaults to `main`
+> (v3); for v2, pin `SURREALDB_C_REF` to a v2-compatible surrealdb.c commit when you build the static library.
 
 ## Quick start
 

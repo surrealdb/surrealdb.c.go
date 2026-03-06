@@ -78,7 +78,7 @@ ifndef _SURREALDB_C_PREBUILT
 build/surrealdb.c: $(SURREALDB_C_LIB)
 
 $(SURREALDB_C_DIR)/Cargo.toml:
-	git clone --depth 1 --branch $(SURREALDB_C_REF) $(SURREALDB_C_REPO) $(SURREALDB_C_DIR)
+	git clone $(SURREALDB_C_REPO) $(SURREALDB_C_DIR) && cd $(SURREALDB_C_DIR) && git checkout $(SURREALDB_C_REF)
 
 $(SURREALDB_C_LIB): $(SURREALDB_C_DIR)/Cargo.toml
 ifneq ($(SURREALDB_C_FEATURES),)

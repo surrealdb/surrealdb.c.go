@@ -16,10 +16,13 @@ jobs:
         surrealdb-version: [v2, v3.0.1]
         remote-driver: [go, cgo]
         include:
-          # cgo + v3 needs surrealdb.c built from the v3-compatible branch
-          - surrealdb-version: v3.0.1
+          # v2 jobs use the last surrealdb.c commit before v3 merge
+          - surrealdb-version: v2
+            remote-driver: go
+            surrealdb-c-ref: 1625b5ce1694efd4056cca453dbcd03682497d8e
+          - surrealdb-version: v2
             remote-driver: cgo
-            surrealdb-c-ref: surrealdb-v3-support
+            surrealdb-c-ref: 1625b5ce1694efd4056cca453dbcd03682497d8e
     steps:
       - uses: actions/checkout@v6
 
