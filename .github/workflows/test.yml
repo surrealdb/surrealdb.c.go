@@ -28,7 +28,9 @@ jobs:
         with:
           go-version: "1.26"
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.surrealdb-version == 'v2' && '1.93.1' || 'stable' }}
 
       - name: Pull SurrealDB Docker image
         run: docker pull surrealdb/surrealdb:${{ matrix.surrealdb-version }}
