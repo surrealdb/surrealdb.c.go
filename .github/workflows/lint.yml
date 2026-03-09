@@ -1,0 +1,30 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  SURREALDB_C_V3_REF: main
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Run golangci-lint
+        env:
+          SURREALDB_C_REF: ${{ env.SURREALDB_C_V3_REF }}
+        run: make lint
