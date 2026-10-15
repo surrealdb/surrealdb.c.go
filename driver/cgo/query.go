@@ -17,7 +17,7 @@ func (c *Conn) Query(ctx context.Context, sql string, vars any) ([]driver.QueryR
 		return nil, fmt.Errorf("marshal query vars: %w", err)
 	}
 
-	return runWithSem(ctx, c.sem, func() ([]driver.QueryResult, error) {
+	return run(ctx, c, func() ([]driver.QueryResult, error) {
 		if obj != nil {
 			defer obj.Free()
 		}
