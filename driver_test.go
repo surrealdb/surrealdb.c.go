@@ -165,6 +165,21 @@ func testDriverQuery(t *testing.T, endpoint string) {
 	assert.Equal(t, "person", gotRID.Table)
 	assert.Equal(t, "alice", fmt.Sprintf("%v", gotRID.ID))
 
+	// Let must keep driver types as SurrealDB values on every backend.
+	require.NoError(t, db.Let(ctx, "let_rid", surrealdb.NewRecordID("person", "alice")))
+	require.NoError(t, db.Let(ctx, "let_line", surrealdb.GeometryLine{{Longitude: 1, Latitude: 2}, {Longitude: 3, Latitude: 4}}))
+	for _, q := range []string{"RETURN type::is_record($let_rid)", "RETURN type::is_geometry($let_line)"} {
+		res, err := db.Query(ctx, q, nil)
+		require.NoError(t, err)
+		require.Len(t, res, 1)
+		require.NoError(t, res[0].Err)
+		v := res[0].Value
+		if arr, ok := v.([]any); ok && len(arr) == 1 {
+			v = arr[0]
+		}
+		assert.Equal(t, true, v, q)
+	}
+
 	// Test with RecordID[int]: numeric record IDs
 	_, err = db.Query(ctx, `CREATE person:123 SET name = "Numeric", age = 99`, nil)
 	require.NoError(t, err)

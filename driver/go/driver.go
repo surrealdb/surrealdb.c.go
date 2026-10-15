@@ -126,8 +126,10 @@ func (d *GoDriver) Invalidate(ctx context.Context) error {
 	return d.db.Invalidate(ctx)
 }
 
+// Let converts driver types (RecordID, geometry, structs) the same way as
+// query variables before passing the value to the Go SDK.
 func (d *GoDriver) Let(ctx context.Context, key string, val any) error {
-	return d.db.Let(ctx, key, val)
+	return d.db.Let(ctx, key, denormalizeValue(val))
 }
 
 func (d *GoDriver) Unset(ctx context.Context, key string) error {
