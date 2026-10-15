@@ -11,9 +11,14 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/surrealdb/surrealdb.c.go/driver"
 )
+
+// readerExitTimeout bounds how long Close waits for stream readers to exit
+// after the connection has been freed.
+var readerExitTimeout = 10 * time.Second
 
 type action int
 
@@ -37,14 +42,38 @@ func (a action) String() string {
 }
 
 // LiveHandle is a handle to an active live query session.
+//
+// Each live query has two goroutines. The reader sits in sr_stream_next,
+// which blocks until the next notification and cannot be interrupted:
+// surrealdb.c has no way to wake it, and in the embedded engine a KILL does
+// not reach the stream either. The forwarder owns Ch and hands notifications
+// from the reader to the caller, so stopping can close Ch at once.
+//
+// After Kill, the reader stays parked until the live query's next event (it
+// then drops the event and frees the stream, which also kills the live query
+// in the engine) or until Close frees the connection, which ends every
+// stream.
 type LiveHandle struct {
-	ID         string
-	Ch         <-chan driver.Notification
-	stream     *C.sr_stream_t
-	resource   string
-	done       chan struct{}
-	stopping   atomic.Bool
-	srvQueryID atomic.Value
+	// ID is the server's live query id when it could be found at creation
+	// time (see Conn.Live), otherwise a random id local to this connection.
+	ID string
+	Ch <-chan driver.Notification
+
+	queryID  atomic.Pointer[string]
+	stopOnce sync.Once
+	stop     chan struct{} // closed once stopping has begun
+	closed   chan struct{} // closed once Ch has been closed
+	done     chan struct{} // closed once the reader has freed the stream
+}
+
+func (lq *LiveHandle) setQueryID(id string) {
+	lq.queryID.CompareAndSwap(nil, &id)
+}
+
+// beginStop stops delivery: Ch is closed and no more notifications are
+// handed to the caller.
+func (lq *LiveHandle) beginStop() {
+	lq.stopOnce.Do(func() { close(lq.stop) })
 }
 
 func uuidToString(b [16]C.uint8_t) string {
@@ -52,6 +81,10 @@ func uuidToString(b [16]C.uint8_t) string {
 	for i := range raw {
 		raw[i] = byte(b[i])
 	}
+	return formatUUID(raw)
+}
+
+func formatUUID(raw [16]byte) string {
 	h := hex.EncodeToString(raw[:])
 	return fmt.Sprintf("%s-%s-%s-%s-%s", h[0:8], h[8:12], h[12:16], h[16:20], h[20:32])
 }
@@ -67,8 +100,7 @@ func extractNotification(cn *C.sr_notification_t) driver.Notification {
 func generateID() string {
 	var b [16]byte
 	_, _ = rand.Read(b[:])
-	h := hex.EncodeToString(b[:])
-	return fmt.Sprintf("%s-%s-%s-%s-%s", h[0:8], h[8:12], h[12:16], h[16:20], h[20:32])
+	return formatUUID(b)
 }
 
 type liveQueryMap struct {
@@ -86,69 +118,114 @@ func (m *liveQueryMap) add(lq *LiveHandle) {
 	m.mu.Unlock()
 }
 
-func (m *liveQueryMap) remove(id string) (*LiveHandle, bool) {
+func (m *liveQueryMap) remove(id string) {
 	m.mu.Lock()
-	lq, ok := m.sessions[id]
-	if ok {
-		delete(m.sessions, id)
-	}
+	delete(m.sessions, id)
 	m.mu.Unlock()
-	return lq, ok
 }
 
-// closeAll stops every live query and waits for their readers to exit.
-// The caller must hold c.mu for writing.
-func (m *liveQueryMap) closeAll(c *Conn) {
+// find returns the handle whose local or server id is id.
+func (m *liveQueryMap) find(id string) *LiveHandle {
 	m.mu.Lock()
-	sessions := make([]*LiveHandle, 0, len(m.sessions))
+	defer m.mu.Unlock()
+	if lq, ok := m.sessions[id]; ok {
+		return lq
+	}
 	for _, lq := range m.sessions {
-		sessions = append(sessions, lq)
-	}
-	m.mu.Unlock()
-
-	// Send a pill to every session, including ones a concurrent Kill has
-	// claimed: that Kill may still be waiting for the read lock we hold.
-	for _, lq := range sessions {
-		lq.stopping.Store(true)
-		sendPoisonPill(c, lq)
-	}
-	for _, lq := range sessions {
-		<-lq.done
-		killServerSide(c, lq)
-		cleanupPoisonPill(c, lq)
-	}
-}
-
-func poisonRecordID(lq *LiveHandle) string {
-	return fmt.Sprintf("%s:__lq_%s", lq.resource, strings.ReplaceAll(lq.ID, "-", ""))
-}
-
-func sendPoisonPill(c *Conn, lq *LiveHandle) {
-	rid := poisonRecordID(lq)
-	_, _ = c.rawQuery(fmt.Sprintf("CREATE %s SET __lq = true", rid), nil)
-}
-
-func cleanupPoisonPill(c *Conn, lq *LiveHandle) {
-	rid := poisonRecordID(lq)
-	_, _ = c.rawQuery(fmt.Sprintf("DELETE %s", rid), nil)
-}
-
-func killServerSide(c *Conn, lq *LiveHandle) {
-	if v := lq.srvQueryID.Load(); v != nil {
-		id := v.(string)
-		cID := cstring(id)
-		defer freeCString(cID)
-		var errPtr C.sr_string_t
-		C.sr_kill(c.c, &errPtr, cID)
-		if errPtr != nil {
-			C.sr_free_string(errPtr)
+		if qid := lq.queryID.Load(); qid != nil && *qid == id {
+			return lq
 		}
 	}
+	return nil
+}
+
+func (m *liveQueryMap) all() []*LiveHandle {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]*LiveHandle, 0, len(m.sessions))
+	for _, lq := range m.sessions {
+		out = append(out, lq)
+	}
+	return out
+}
+
+// stopAll stops delivery on every live query and returns their handles.
+func (m *liveQueryMap) stopAll() []*LiveHandle {
+	handles := m.all()
+	for _, lq := range handles {
+		lq.beginStop()
+		<-lq.closed
+	}
+	return handles
+}
+
+// rawKill runs KILL for a live query id. The caller must hold c.mu.
+func (c *Conn) rawKill(id string) error {
+	cID := cstring(id)
+	defer freeCString(cID)
+	var errPtr C.sr_string_t
+	rc := C.sr_kill(c.c, &errPtr, cID)
+	return surrealError(rc, errPtr)
+}
+
+// tableOf returns the table a live query resource refers to. surrealdb.c
+// treats "table:key" as a record id and anything else as a table.
+func tableOf(resource string) string {
+	if tb, key, ok := strings.Cut(resource, ":"); ok && tb != "" && key != "" {
+		return tb
+	}
+	return resource
+}
+
+// quoteIdent escapes a table name for use as a SurrealQL identifier.
+func quoteIdent(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, "`", "\\`")
+	return "`" + s + "`"
+}
+
+// tableLives returns the ids of the live queries registered on a table.
+// The caller must hold c.mu.
+func (c *Conn) tableLives(tb string) (map[string]struct{}, error) {
+	res, err := c.rawQuery("INFO FOR TABLE "+quoteIdent(tb), nil)
+	if err != nil {
+		return nil, err
+	}
+	if len(res) != 1 || res[0].Err != nil {
+		return nil, fmt.Errorf("INFO FOR TABLE failed")
+	}
+	v := res[0].Value
+	if arr, ok := v.([]any); ok && len(arr) == 1 {
+		v = arr[0]
+	}
+	info, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("unexpected INFO FOR TABLE result %T", v)
+	}
+	lives, ok := info["lives"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("INFO FOR TABLE has no lives")
+	}
+	out := make(map[string]struct{}, len(lives))
+	for id := range lives {
+		out[id] = struct{}{}
+	}
+	return out, nil
 }
 
 // Live creates a live query on the given resource.
 func (c *Conn) Live(ctx context.Context, resource string) (*LiveHandle, error) {
 	return run(ctx, c, func() (*LiveHandle, error) {
+		// sr_select_live does not return the live query id. Creating live
+		// queries one at a time per connection, the live query that
+		// appears on the table is the one just created. If that cannot be
+		// determined, the id is taken from the first notification instead.
+		c.liveMu.Lock()
+		defer c.liveMu.Unlock()
+
+		tb := tableOf(resource)
+		before, beforeErr := c.tableLives(tb)
+
 		cRes := cstring(resource)
 		defer freeCString(cRes)
 
@@ -160,37 +237,77 @@ func (c *Conn) Live(ctx context.Context, resource string) (*LiveHandle, error) {
 		}
 
 		ch := make(chan driver.Notification, 64)
-		done := make(chan struct{})
 		lq := &LiveHandle{
-			ID:       generateID(),
-			Ch:       ch,
-			stream:   streamPtr,
-			resource: resource,
-			done:     done,
+			Ch:     ch,
+			stop:   make(chan struct{}),
+			closed: make(chan struct{}),
+			done:   make(chan struct{}),
+		}
+
+		if beforeErr == nil {
+			if after, err := c.tableLives(tb); err == nil {
+				var added []string
+				for id := range after {
+					if _, ok := before[id]; !ok {
+						added = append(added, id)
+					}
+				}
+				if len(added) == 1 {
+					lq.setQueryID(added[0])
+				}
+			}
+		}
+		if id := lq.queryID.Load(); id != nil {
+			lq.ID = *id
+		} else {
+			lq.ID = generateID()
 		}
 
 		c.live.add(lq)
 
+		handoff := make(chan driver.Notification)
+
+		// Reader: the only goroutine that touches the stream. The handle
+		// stays in c.live until the stream is freed.
 		go func() {
-			// The handle stays in c.live until the stream is freed, so
-			// Close never disconnects while this goroutine uses it.
-			defer close(done)
+			defer close(lq.done)
 			defer c.live.remove(lq.ID)
-			defer close(ch)
 			defer C.sr_stream_kill(streamPtr)
+			defer close(handoff)
 
 			for {
 				var cn C.sr_notification_t
-				rc := C.sr_stream_next(streamPtr, &cn)
-				if rc <= 0 {
-					return
-				}
-				if lq.stopping.Load() {
+				if rc := C.sr_stream_next(streamPtr, &cn); rc <= 0 {
 					return
 				}
 				n := extractNotification(&cn)
-				lq.srvQueryID.CompareAndSwap(nil, n.QueryID)
-				ch <- n
+				lq.setQueryID(n.QueryID)
+				select {
+				case handoff <- n:
+				case <-lq.stop:
+					return
+				}
+			}
+		}()
+
+		// Forwarder: the only goroutine that sends on or closes Ch.
+		go func() {
+			defer close(lq.closed)
+			defer close(ch)
+			for {
+				select {
+				case n, ok := <-handoff:
+					if !ok {
+						return
+					}
+					select {
+					case ch <- n:
+					case <-lq.stop:
+						return
+					}
+				case <-lq.stop:
+					return
+				}
 			}
 		}()
 
@@ -198,29 +315,24 @@ func (c *Conn) Live(ctx context.Context, resource string) (*LiveHandle, error) {
 	}, c.Kill)
 }
 
-// Kill stops a live query session and waits for its reader to exit.
+// Kill stops a live query session. When it returns, the session's channel
+// has been closed and no further notifications are delivered. It writes
+// nothing to the database.
 func (c *Conn) Kill(lq *LiveHandle) {
-	// Take the connection before claiming the stop, so a Close that runs
-	// in between always sees an unclaimed session and wakes it itself.
-	release, err := c.acquire()
-	if err != nil {
-		// Close has already stopped every live query.
-		return
-	}
-	if !lq.stopping.CompareAndSwap(false, true) {
-		// Already being stopped by another Kill.
-		release()
-		<-lq.done
-		return
-	}
-	sendPoisonPill(c, lq)
-	release()
+	lq.beginStop()
+	<-lq.closed
+}
 
-	<-lq.done
-
-	if release, err := c.acquire(); err == nil {
-		killServerSide(c, lq)
-		cleanupPoisonPill(c, lq)
-		release()
+// KillID stops a live query by its id. If the id belongs to a live query
+// started on this connection, it behaves like Kill. Otherwise the KILL is
+// sent to the server as is.
+func (c *Conn) KillID(ctx context.Context, id string) error {
+	if lq := c.live.find(id); lq != nil {
+		c.Kill(lq)
+		return nil
 	}
+	_, err := run(ctx, c, func() (struct{}, error) {
+		return struct{}{}, c.rawKill(id)
+	}, nil)
+	return err
 }

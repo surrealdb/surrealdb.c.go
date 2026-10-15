@@ -44,6 +44,8 @@ func (d *CDriver) Live(ctx context.Context, resource string) (string, <-chan dri
 	return handle.ID, handle.Ch, kill, nil
 }
 
-func (d *CDriver) Kill(_ string) error {
-	return driver.ErrNotSupported
+// Kill stops a live query by the id returned from Live, or by the server's
+// live query id.
+func (d *CDriver) Kill(liveQueryID string) error {
+	return d.conn.KillID(context.Background(), liveQueryID)
 }

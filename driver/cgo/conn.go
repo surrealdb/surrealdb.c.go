@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/surrealdb/surrealdb.c.go/driver"
@@ -41,6 +42,9 @@ type Conn struct {
 	c    *C.sr_surreal_t
 	live *liveQueryMap
 	sem  chan struct{}
+
+	// liveMu serialises live query creation; see Live.
+	liveMu sync.Mutex
 }
 
 // acquire takes a read lock on the connection and returns the function that
@@ -79,19 +83,33 @@ func freeCString(p *C.char) {
 
 // Close disconnects from the database and releases all resources.
 //
-// Close waits for calls already running on other goroutines to return, then
-// stops all live queries and frees the connection. Calls made after Close
-// return driver.ErrClosed. Close is safe to call more than once and from
-// several goroutines.
+// Close waits for calls already running on other goroutines to return,
+// closes every live query channel, then frees the connection. Calls made
+// after Close return driver.ErrClosed. Close is safe to call more than once
+// and from several goroutines.
+//
+// Freeing the connection shuts down its runtime, which ends every live query
+// stream, so goroutines parked in sr_stream_next return and free their
+// streams. Close waits (with a timeout) for them to do so.
 func (c *Conn) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.c == nil {
 		return
 	}
-	c.live.closeAll(c)
+	handles := c.live.stopAll()
 	C.sr_surreal_disconnect(c.c)
 	c.c = nil
+
+	deadline := time.NewTimer(readerExitTimeout)
+	defer deadline.Stop()
+	for _, lq := range handles {
+		select {
+		case <-lq.done:
+		case <-deadline.C:
+			return
+		}
+	}
 }
 
 // Use selects the namespace and database for subsequent operations.
