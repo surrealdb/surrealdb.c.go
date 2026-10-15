@@ -36,7 +36,9 @@ var (
 	passKeys = []string{"pass", "password"}
 )
 
-func firstString(m map[string]any, keys []string) (string, error) {
+// firstString returns the value of the first of keys present in m, and the
+// key it came from.
+func firstString(m map[string]any, keys []string) (val, key string, err error) {
 	for _, k := range keys {
 		v, ok := m[k]
 		if !ok || v == nil {
@@ -44,11 +46,11 @@ func firstString(m map[string]any, keys []string) (string, error) {
 		}
 		s, ok := v.(string)
 		if !ok {
-			return "", fmt.Errorf("surrealdb: auth field %q must be a string, got %T", k, v)
+			return "", k, fmt.Errorf("surrealdb: auth field %q must be a string, got %T", k, v)
 		}
-		return s, nil
+		return s, k, nil
 	}
-	return "", nil
+	return "", "", nil
 }
 
 // parseAuth turns a driver.Auth or map[string]any into an authRequest.
@@ -69,20 +71,21 @@ func parseAuth(authData any) (authRequest, error) {
 	}
 
 	var r authRequest
+	var nsKey, dbKey, acKey string
 	var err error
-	if r.ns, err = firstString(m, nsKeys); err != nil {
+	if r.ns, nsKey, err = firstString(m, nsKeys); err != nil {
 		return r, err
 	}
-	if r.db, err = firstString(m, dbKeys); err != nil {
+	if r.db, dbKey, err = firstString(m, dbKeys); err != nil {
 		return r, err
 	}
-	if r.ac, err = firstString(m, acKeys); err != nil {
+	if r.ac, acKey, err = firstString(m, acKeys); err != nil {
 		return r, err
 	}
-	if r.user, err = firstString(m, userKeys); err != nil {
+	if r.user, _, err = firstString(m, userKeys); err != nil {
 		return r, err
 	}
-	if r.pass, err = firstString(m, passKeys); err != nil {
+	if r.pass, _, err = firstString(m, passKeys); err != nil {
 		return r, err
 	}
 
@@ -90,8 +93,11 @@ func parseAuth(authData any) (authRequest, error) {
 	case r.ac != "":
 		r.level = authRecord
 		r.recordParams = make(map[string]any, len(m))
+		// Drop only the selector keys actually used, so a custom field
+		// that happens to share an alias (e.g. "access" next to "AC")
+		// still reaches the access method as a variable.
 		for k, v := range m {
-			if !isAnyOf(k, nsKeys, dbKeys, acKeys) {
+			if k != nsKey && k != dbKey && k != acKey {
 				r.recordParams[k] = v
 			}
 		}
@@ -120,17 +126,6 @@ func authMap(a driver.Auth) map[string]any {
 	set("user", a.Username)
 	set("pass", a.Password)
 	return m
-}
-
-func isAnyOf(k string, lists ...[]string) bool {
-	for _, l := range lists {
-		for _, s := range l {
-			if k == s {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // SignIn signs in and returns the access token.
