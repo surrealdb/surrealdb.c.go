@@ -23,12 +23,17 @@ ver, _ := db.Version(ctx) // ver.Version == "3.0.1" for the embedded engine
 err = db.Health(ctx)      // nil if healthy
 ```
 
-`Close` waits for calls already running on other goroutines, stops all live
-queries, then frees the connection. It is safe to call more than once and from
-several goroutines. Any call made after `Close` returns `surrealdb.ErrClosed`.
+With the embedded backend (`mem://`, `surrealkv://`, `rocksdb://`, and
+`ws://`/`http://` when no remote driver is registered), `Close` waits for calls
+already running on other goroutines, stops all live queries, then frees the
+connection. It is safe to call more than once and from several goroutines. Any
+call made after `Close` returns `surrealdb.ErrClosed`. A cancelled context
+makes the call return `ctx.Err()` straight away, but the C call it started
+cannot be interrupted and finishes in the background.
 
-A cancelled context makes the call return `ctx.Err()` straight away, but the
-C call it started cannot be interrupted and finishes in the background.
+With the remote Go driver (`driver/go`), `Close` closes the surrealdb.go
+connection, and errors after `Close` come from surrealdb.go rather than
+`surrealdb.ErrClosed`.
 
 ## Querying
 
