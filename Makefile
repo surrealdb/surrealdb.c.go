@@ -50,10 +50,12 @@ endif
 SURREALDB_C_ROCKSDB_LIB = $(SURREALDB_C_ROCKSDB_LIBDIR)/libsurrealdb_c.a
 
 # ---------------------------------------------------------------------------
-# macOS: use Apple's system clang and SDK so CGo works even inside a Nix shell
-# (Nix-provided clang may be too old or have an incomplete SDK).
+# macOS inside a Nix shell: use Apple's system clang and SDK so CGo works
+# (Nix-provided clang may be too old or have an incomplete SDK). Outside Nix
+# the default toolchain is used; forcing the Command Line Tools SDK breaks
+# linking where it doesn't match the active Xcode (e.g. GitHub's macOS runners).
 # ---------------------------------------------------------------------------
-ifeq ($(shell uname -s),Darwin)
+ifeq ($(shell uname -s)$(if $(IN_NIX_SHELL),nix),Darwinnix)
   APPLE_CLT_CC := /Library/Developer/CommandLineTools/usr/bin/clang
   ifneq (,$(wildcard $(APPLE_CLT_CC)))
     export CC := $(APPLE_CLT_CC)
