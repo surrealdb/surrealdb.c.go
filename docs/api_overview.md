@@ -23,7 +23,7 @@ ver, _ := db.Version(ctx) // ver.Version == "3.0.1" for the embedded engine
 err = db.Health(ctx)      // nil if healthy
 ```
 
-With the embedded backend (`mem://`, `surrealkv://`, `rocksdb://`, and
+With the C backend (`mem://`, `surrealkv://`, `rocksdb://`, and
 `ws://`/`http://` when no remote driver is registered), `Close` waits for calls
 already running on other goroutines, stops all live queries, then frees the
 connection. It is safe to call more than once and from several goroutines. Any
