@@ -10,6 +10,7 @@ package surrealdbgo
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"reflect"
 	"strings"
 	"time"
@@ -17,6 +18,9 @@ import (
 	surrealdb "github.com/surrealdb/surrealdb.c.go"
 	"github.com/surrealdb/surrealdb.c.go/driver"
 	surrealdbgo "github.com/surrealdb/surrealdb.go"
+	"github.com/surrealdb/surrealdb.go/pkg/connection"
+	"github.com/surrealdb/surrealdb.go/pkg/connection/gorillaws"
+	"github.com/surrealdb/surrealdb.go/pkg/connection/http"
 	"github.com/surrealdb/surrealdb.go/pkg/models"
 )
 
@@ -42,17 +46,38 @@ func Register() {
 	surrealdb.RegisterRemoteDriver(openRemote)
 }
 
+// openRemote builds the connection the same way as
+// surrealdbgo.FromEndpointURLString, but keeps it so that RPC methods the
+// SDK does not wrap (such as ping) can be sent directly.
 func openRemote(ctx context.Context, endpoint string) (driver.Driver, error) {
-	goDb, err := surrealdbgo.FromEndpointURLString(ctx, endpoint)
+	u, err := url.ParseRequestURI(endpoint)
 	if err != nil {
 		return nil, err
 	}
-	return &GoDriver{db: goDb}, nil
+	conf := connection.NewConfig(u)
+	if err := conf.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid connection config: %w", err)
+	}
+	var con connection.Connection
+	switch conf.URL.Scheme {
+	case "http", "https":
+		con = http.New(conf)
+	case "ws", "wss":
+		con = gorillaws.New(conf)
+	default:
+		return nil, fmt.Errorf("unsupported remote scheme %q", conf.URL.Scheme)
+	}
+	goDb, err := surrealdbgo.FromConnection(ctx, con)
+	if err != nil {
+		return nil, err
+	}
+	return &GoDriver{db: goDb, con: con}, nil
 }
 
 // GoDriver implements driver.Driver using the pure Go SDK.
 type GoDriver struct {
-	db *surrealdbgo.DB
+	db  *surrealdbgo.DB
+	con connection.Connection
 }
 
 func (d *GoDriver) Close() {
@@ -126,6 +151,31 @@ func (d *GoDriver) Authenticate(ctx context.Context, token string) error {
 
 func (d *GoDriver) Invalidate(ctx context.Context) error {
 	return d.db.Invalidate(ctx)
+}
+
+// Let converts driver types (RecordID, geometry, structs) the same way as
+// query variables before passing the value to the Go SDK.
+func (d *GoDriver) Let(ctx context.Context, key string, val any) error {
+	return d.db.Let(ctx, key, denormalizeValue(val))
+}
+
+func (d *GoDriver) Unset(ctx context.Context, key string) error {
+	return d.db.Unset(ctx, key)
+}
+
+// Health sends the RPC ping method. surrealdbgo.Send only allows data
+// methods, so ping goes straight to the connection.
+func (d *GoDriver) Health(ctx context.Context) error {
+	_, err := d.con.Send(ctx, "ping")
+	return err
+}
+
+func (d *GoDriver) Version(ctx context.Context) (*driver.VersionData, error) {
+	v, err := d.db.Version(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &driver.VersionData{Version: v.Version, Build: v.Build, Timestamp: v.Timestamp}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -253,13 +303,16 @@ func fieldToAny(fv reflect.Value) any {
 		}
 		return m
 	case reflect.Map:
+		if fv.IsNil() {
+			return fv.Interface()
+		}
 		m := make(map[string]any, fv.Len())
 		iter := fv.MapRange()
 		for iter.Next() {
-			m[iter.Key().String()] = iter.Value().Interface()
+			m[iter.Key().String()] = denormalizeValue(iter.Value().Interface())
 		}
 		return m
-	case reflect.Slice:
+	case reflect.Slice, reflect.Array:
 		if fv.Type() == geometryLineType {
 			line := fv.Interface().(driver.GeometryLine)
 			mLine := make(models.GeometryLine, len(line))
@@ -268,7 +321,16 @@ func fieldToAny(fv reflect.Value) any {
 			}
 			return mLine
 		}
-		return fv.Interface()
+		if fv.Kind() == reflect.Slice && (fv.IsNil() || fv.Type().Elem().Kind() == reflect.Uint8) {
+			return fv.Interface()
+		}
+		// Convert each element, so typed containers such as
+		// []RecordID[string] encode the same way as on the C backend.
+		out := make([]any, fv.Len())
+		for i := range out {
+			out[i] = denormalizeValue(fv.Index(i).Interface())
+		}
+		return out
 	default:
 		if fv.Type() == timeDurationType {
 			return &models.CustomDuration{Duration: time.Duration(fv.Int())}
@@ -352,6 +414,8 @@ func denormalizeValue(v any) any {
 	switch val := v.(type) {
 	case driver.RecordID[any]:
 		return models.NewRecordID(val.Table, val.ID)
+	case time.Duration:
+		return &models.CustomDuration{Duration: val}
 	case map[string]any:
 		out := make(map[string]any, len(val))
 		for k, elem := range val {
@@ -372,7 +436,8 @@ func denormalizeValue(v any) any {
 		return mLine
 	default:
 		rv := reflect.ValueOf(v)
-		if rv.Kind() == reflect.Struct {
+		switch rv.Kind() {
+		case reflect.Struct, reflect.Slice, reflect.Array, reflect.Map:
 			return fieldToAny(rv)
 		}
 		return v

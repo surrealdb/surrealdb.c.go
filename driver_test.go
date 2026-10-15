@@ -194,6 +194,42 @@ func testDriverQuery(t *testing.T, endpoint string) {
 	assert.Equal(t, "person", gotRID.Table)
 	assert.Equal(t, "alice", fmt.Sprintf("%v", gotRID.ID))
 
+	// Health and Version must work on every backend.
+	require.NoError(t, db.Health(ctx))
+	ver, err := db.Version(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, ver.Version)
+
+	// Let must keep driver types as SurrealDB values on every backend.
+	require.NoError(t, db.Let(ctx, "let_rid", surrealdb.NewRecordID("person", "alice")))
+	require.NoError(t, db.Let(ctx, "let_line", surrealdb.GeometryLine{{Longitude: 1, Latitude: 2}, {Longitude: 3, Latitude: 4}}))
+	require.NoError(t, db.Let(ctx, "let_dur", 90*time.Second))
+	require.NoError(t, db.Let(ctx, "let_nil_slice", []string(nil)))
+	require.NoError(t, db.Let(ctx, "let_nil_bytes", []byte(nil)))
+	require.NoError(t, db.Let(ctx, "let_nil_entry", map[string]any{"a": nil}))
+	require.NoError(t, db.Let(ctx, "let_rids", []surrealdb.RecordID[string]{surrealdb.NewRecordID("person", "alice")}))
+	require.NoError(t, db.Let(ctx, "let_rid_map", map[string]surrealdb.RecordID[string]{"a": surrealdb.NewRecordID("person", "alice")}))
+	for _, q := range []string{
+		"RETURN type::is_record($let_rid)",
+		"RETURN type::is_geometry($let_line)",
+		"RETURN type::is_record($let_rids[0])",
+		"RETURN type::is_record($let_rid_map.a)",
+		"RETURN type::is_duration($let_dur)",
+		"RETURN type::is_null($let_nil_slice)",
+		"RETURN type::is_null($let_nil_bytes)",
+		"RETURN type::is_null($let_nil_entry.a)",
+	} {
+		res, err := db.Query(ctx, q, nil)
+		require.NoError(t, err)
+		require.Len(t, res, 1)
+		require.NoError(t, res[0].Err)
+		v := res[0].Value
+		if arr, ok := v.([]any); ok && len(arr) == 1 {
+			v = arr[0]
+		}
+		assert.Equal(t, true, v, q)
+	}
+
 	// Test with RecordID[int]: numeric record IDs
 	_, err = db.Query(ctx, `CREATE person:123 SET name = "Numeric", age = 99`, nil)
 	require.NoError(t, err)

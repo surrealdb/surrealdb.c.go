@@ -65,3 +65,19 @@ func (d *CDriver) Authenticate(ctx context.Context, token string) error {
 func (d *CDriver) Invalidate(ctx context.Context) error {
 	return d.conn.Invalidate(ctx)
 }
+
+func (d *CDriver) Let(ctx context.Context, key string, val any) error {
+	return d.conn.Let(ctx, key, val)
+}
+
+func (d *CDriver) Unset(ctx context.Context, key string) error {
+	return d.conn.Unset(ctx, key)
+}
+
+func (d *CDriver) Health(ctx context.Context) error {
+	return d.conn.Health(ctx)
+}
+
+func (d *CDriver) Version(ctx context.Context) (*driver.VersionData, error) {
+	return d.conn.Version(ctx)
+}
