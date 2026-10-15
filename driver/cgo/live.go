@@ -63,7 +63,7 @@ type LiveHandle struct {
 	stopOnce sync.Once
 	stop     chan struct{} // closed once stopping has begun
 	closed   chan struct{} // closed once Ch has been closed
-	done     chan struct{} // closed once the reader has freed the stream
+	done     chan struct{} // closed once the stream is freed and Ch is closed
 }
 
 func (lq *LiveHandle) setQueryID(id string) {
@@ -268,10 +268,15 @@ func (c *Conn) Live(ctx context.Context, resource string) (*LiveHandle, error) {
 		handoff := make(chan driver.Notification)
 
 		// Reader: the only goroutine that touches the stream. The handle
-		// stays in c.live until the stream is freed.
+		// stays in c.live until the stream is freed and the forwarder has
+		// closed Ch, so Close can always reach a forwarder that is still
+		// blocked on a full channel.
 		go func() {
 			defer close(lq.done)
-			defer c.live.remove(lq.ID)
+			defer func() {
+				<-lq.closed
+				c.live.remove(lq.ID)
+			}()
 			defer C.sr_stream_kill(streamPtr)
 			defer close(handoff)
 
