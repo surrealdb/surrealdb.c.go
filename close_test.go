@@ -113,3 +113,18 @@ func TestQueryVarsReusableAfterCancel(t *testing.T) {
 		cancel()
 	}
 }
+
+func TestSignInParamsReusableAfterCancel(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+
+	nested := map[string]any{"n": 0}
+	creds := map[string]any{"NS": "test_ns", "DB": "test_db", "AC": "none", "extra": nested}
+	for i := 0; i < 200; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		go cancel()
+		_, _ = db.SignIn(ctx, creds)
+		nested["n"] = i
+		cancel()
+	}
+}
