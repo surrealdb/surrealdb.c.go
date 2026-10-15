@@ -97,3 +97,19 @@ func TestConcurrentClose(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// A caller may reuse its variables as soon as Query returns, including when
+// it returns early because the context was cancelled. Run with -race.
+func TestQueryVarsReusableAfterCancel(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+
+	vars := map[string]any{"n": 0}
+	for i := 0; i < 200; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		go cancel()
+		_, _ = db.Query(ctx, "RETURN $n", vars)
+		vars["n"] = i
+		cancel()
+	}
+}
