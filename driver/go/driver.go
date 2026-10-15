@@ -10,6 +10,7 @@ package surrealdbgo
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"reflect"
 	"strings"
 	"time"
@@ -18,6 +19,8 @@ import (
 	"github.com/surrealdb/surrealdb.c.go/driver"
 	surrealdbgo "github.com/surrealdb/surrealdb.go"
 	"github.com/surrealdb/surrealdb.go/pkg/connection"
+	"github.com/surrealdb/surrealdb.go/pkg/connection/gorillaws"
+	"github.com/surrealdb/surrealdb.go/pkg/connection/http"
 	"github.com/surrealdb/surrealdb.go/pkg/models"
 )
 
@@ -43,17 +46,38 @@ func Register() {
 	surrealdb.RegisterRemoteDriver(openRemote)
 }
 
+// openRemote builds the connection the same way as
+// surrealdbgo.FromEndpointURLString, but keeps it so that RPC methods the
+// SDK does not wrap (such as ping) can be sent directly.
 func openRemote(ctx context.Context, endpoint string) (driver.Driver, error) {
-	goDb, err := surrealdbgo.FromEndpointURLString(ctx, endpoint)
+	u, err := url.ParseRequestURI(endpoint)
 	if err != nil {
 		return nil, err
 	}
-	return &GoDriver{db: goDb}, nil
+	conf := connection.NewConfig(u)
+	if err := conf.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid connection config: %w", err)
+	}
+	var con connection.Connection
+	switch conf.URL.Scheme {
+	case "http", "https":
+		con = http.New(conf)
+	case "ws", "wss":
+		con = gorillaws.New(conf)
+	default:
+		return nil, fmt.Errorf("unsupported remote scheme %q", conf.URL.Scheme)
+	}
+	goDb, err := surrealdbgo.FromConnection(ctx, con)
+	if err != nil {
+		return nil, err
+	}
+	return &GoDriver{db: goDb, con: con}, nil
 }
 
 // GoDriver implements driver.Driver using the pure Go SDK.
 type GoDriver struct {
-	db *surrealdbgo.DB
+	db  *surrealdbgo.DB
+	con connection.Connection
 }
 
 func (d *GoDriver) Close() {
@@ -136,10 +160,11 @@ func (d *GoDriver) Unset(ctx context.Context, key string) error {
 	return d.db.Unset(ctx, key)
 }
 
-// Health sends the RPC ping method.
+// Health sends the RPC ping method. surrealdbgo.Send only allows data
+// methods, so ping goes straight to the connection.
 func (d *GoDriver) Health(ctx context.Context) error {
-	var res connection.RPCResponse[any]
-	return surrealdbgo.Send[any](ctx, d.db, &res, "ping")
+	_, err := d.con.Send(ctx, "ping")
+	return err
 }
 
 func (d *GoDriver) Version(ctx context.Context) (*driver.VersionData, error) {

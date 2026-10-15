@@ -113,3 +113,17 @@ func TestQueryVarsReusableAfterCancel(t *testing.T) {
 		cancel()
 	}
 }
+
+func TestLetValueReusableAfterCancel(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+
+	val := map[string]any{"n": 0}
+	for i := 0; i < 200; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		go cancel()
+		_ = db.Let(ctx, "v", val)
+		val["n"] = i
+		cancel()
+	}
+}

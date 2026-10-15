@@ -13,19 +13,23 @@ import (
 
 // Let defines a variable on the connection, available as $key in later
 // queries.
+//
+// val is converted before Let can return, so the caller may change it as
+// soon as Let returns, even when ctx is cancelled first.
 func (c *Conn) Let(ctx context.Context, key string, val any) error {
-	_, err := run(ctx, c, func() (struct{}, error) {
-		cVal, err := toCValue(val)
-		if err != nil {
-			return struct{}{}, fmt.Errorf("marshal value for %q: %w", key, err)
-		}
-		defer C.sr_value_free(cVal)
+	cVal, err := toCValue(val)
+	if err != nil {
+		return fmt.Errorf("marshal value for %q: %w", key, err)
+	}
+	free := func() { C.sr_value_free(cVal) }
+	_, err = runOwning(ctx, c, func() (struct{}, error) {
+		defer free()
 		cKey := cstring(key)
 		defer freeCString(cKey)
 		var errPtr C.sr_string_t
 		rc := C.sr_set(c.c, &errPtr, cKey, cVal)
 		return struct{}{}, surrealError(rc, errPtr)
-	}, nil)
+	}, nil, free)
 	return err
 }
 

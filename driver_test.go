@@ -165,6 +165,12 @@ func testDriverQuery(t *testing.T, endpoint string) {
 	assert.Equal(t, "person", gotRID.Table)
 	assert.Equal(t, "alice", fmt.Sprintf("%v", gotRID.ID))
 
+	// Health and Version must work on every backend.
+	require.NoError(t, db.Health(ctx))
+	ver, err := db.Version(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, ver.Version)
+
 	// Let must keep driver types as SurrealDB values on every backend.
 	require.NoError(t, db.Let(ctx, "let_rid", surrealdb.NewRecordID("person", "alice")))
 	require.NoError(t, db.Let(ctx, "let_line", surrealdb.GeometryLine{{Longitude: 1, Latitude: 2}, {Longitude: 3, Latitude: 4}}))
