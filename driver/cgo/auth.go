@@ -82,13 +82,6 @@ func parseAuth(authData any) (authRequest, error) {
 	if r.ac, acKey, err = firstString(m, acKeys); err != nil {
 		return r, err
 	}
-	if r.user, _, err = firstString(m, userKeys); err != nil {
-		return r, err
-	}
-	if r.pass, _, err = firstString(m, passKeys); err != nil {
-		return r, err
-	}
-
 	switch {
 	case r.ac != "":
 		r.level = authRecord
@@ -109,6 +102,17 @@ func parseAuth(authData any) (authRequest, error) {
 		return r, errors.New("surrealdb: auth with a database needs a namespace")
 	default:
 		r.level = authRoot
+	}
+
+	// For record access, user/pass are ordinary variables of any type and
+	// travel in recordParams. Only system users need them as strings.
+	if r.level != authRecord {
+		if r.user, _, err = firstString(m, userKeys); err != nil {
+			return r, err
+		}
+		if r.pass, _, err = firstString(m, passKeys); err != nil {
+			return r, err
+		}
 	}
 	return r, nil
 }

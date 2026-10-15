@@ -46,3 +46,23 @@ func TestParseAuthKeepsCustomFieldsNamedLikeAliases(t *testing.T) {
 		t.Fatalf("recordParams = %v, want %v", r.recordParams, want)
 	}
 }
+
+// For record access, user/pass are ordinary variables and may be any type.
+func TestParseAuthRecordUserPassAnyType(t *testing.T) {
+	r, err := parseAuth(map[string]any{
+		"NS": "n", "DB": "d", "AC": "a",
+		"user": map[string]any{"id": 1}, "pass": 42,
+	})
+	if err != nil {
+		t.Fatalf("parseAuth: %v", err)
+	}
+	if _, ok := r.recordParams["user"].(map[string]any); !ok {
+		t.Errorf("user param = %#v, want the map", r.recordParams["user"])
+	}
+	if r.recordParams["pass"] != 42 {
+		t.Errorf("pass param = %#v, want 42", r.recordParams["pass"])
+	}
+	if _, err := parseAuth(map[string]any{"user": 1, "pass": "p"}); err == nil {
+		t.Error("root auth with a non-string user succeeded")
+	}
+}
