@@ -76,6 +76,9 @@ func TestUseAfterClose(t *testing.T) {
 	if _, err := db.Query(ctx, "RETURN 1", nil); !errors.Is(err, ErrClosed) {
 		t.Errorf("Query after Close: got %v, want ErrClosed", err)
 	}
+	if _, err := db.Query(ctx, "RETURN $x", map[string]any{"x": 1}); !errors.Is(err, ErrClosed) {
+		t.Errorf("Query with vars after Close: got %v, want ErrClosed", err)
+	}
 	if _, _, _, err := db.Live(ctx, "person"); !errors.Is(err, ErrClosed) {
 		t.Errorf("Live after Close: got %v, want ErrClosed", err)
 	}

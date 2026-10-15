@@ -12,12 +12,13 @@ import (
 
 // Query executes a SurrealQL query, automatically marshaling vars.
 func (c *Conn) Query(ctx context.Context, sql string, vars any) ([]driver.QueryResult, error) {
-	obj, err := marshalVars(vars)
-	if err != nil {
-		return nil, fmt.Errorf("marshal query vars: %w", err)
-	}
-
 	return run(ctx, c, func() ([]driver.QueryResult, error) {
+		// Marshal inside work so the C object is only allocated once the
+		// call is certain to run, and is always freed by it.
+		obj, err := marshalVars(vars)
+		if err != nil {
+			return nil, fmt.Errorf("marshal query vars: %w", err)
+		}
 		if obj != nil {
 			defer obj.Free()
 		}

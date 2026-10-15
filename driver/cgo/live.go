@@ -106,10 +106,11 @@ func (m *liveQueryMap) closeAll(c *Conn) {
 	}
 	m.mu.Unlock()
 
+	// Send a pill to every session, including ones a concurrent Kill has
+	// claimed: that Kill may still be waiting for the read lock we hold.
 	for _, lq := range sessions {
-		if lq.stopping.CompareAndSwap(false, true) {
-			sendPoisonPill(c, lq)
-		}
+		lq.stopping.Store(true)
+		sendPoisonPill(c, lq)
 	}
 	for _, lq := range sessions {
 		<-lq.done
@@ -199,15 +200,17 @@ func (c *Conn) Live(ctx context.Context, resource string) (*LiveHandle, error) {
 
 // Kill stops a live query session and waits for its reader to exit.
 func (c *Conn) Kill(lq *LiveHandle) {
-	if !lq.stopping.CompareAndSwap(false, true) {
-		// Already being stopped by Close or another Kill.
-		<-lq.done
-		return
-	}
-
+	// Take the connection before claiming the stop, so a Close that runs
+	// in between always sees an unclaimed session and wakes it itself.
 	release, err := c.acquire()
 	if err != nil {
 		// Close has already stopped every live query.
+		return
+	}
+	if !lq.stopping.CompareAndSwap(false, true) {
+		// Already being stopped by another Kill.
+		release()
+		<-lq.done
 		return
 	}
 	sendPoisonPill(c, lq)
