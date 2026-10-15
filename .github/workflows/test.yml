@@ -78,7 +78,7 @@ jobs:
             .cache/surrealdb.c/target/release/libsurrealdb_c.a
           key: surrealdb-c-${{ runner.os }}-${{ env.SURREALDB_C_REF }}-${{ env.RUST_TOOLCHAIN }}-features-${{ env.SURREALDB_C_FEATURES || 'none' }}
 
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
 
@@ -114,7 +114,9 @@ jobs:
             .cache/surrealdb.c/target/release/libsurrealdb_c.a
           key: surrealdb-c-${{ runner.os }}-${{ env.SURREALDB_C_REF }}-stable-features-none
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
+        with:
+          toolchain: stable
 
       - name: Run embedded tests
         run: make test
