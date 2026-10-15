@@ -11,17 +11,30 @@ import "context"
 // finishes, the lock and slot are released and, if work succeeded, cleanup
 // is called with its result.
 func run[T any](ctx context.Context, c *Conn, work func() (T, error), cleanup func(T)) (T, error) {
+	return runOwning(ctx, c, work, cleanup, nil)
+}
+
+// runOwning is run for work that owns resources allocated by the caller.
+// If work is never started (ctx is cancelled first, or the connection is
+// closed), notStarted is called instead so the caller can release them.
+func runOwning[T any](ctx context.Context, c *Conn, work func() (T, error), cleanup func(T), notStarted func()) (T, error) {
 	var zero T
 
 	select {
 	case c.sem <- struct{}{}:
 	case <-ctx.Done():
+		if notStarted != nil {
+			notStarted()
+		}
 		return zero, ctx.Err()
 	}
 
 	release, err := c.acquire()
 	if err != nil {
 		<-c.sem
+		if notStarted != nil {
+			notStarted()
+		}
 		return zero, err
 	}
 
