@@ -17,6 +17,7 @@ import (
 	surrealdb "github.com/surrealdb/surrealdb.c.go"
 	"github.com/surrealdb/surrealdb.c.go/driver"
 	surrealdbgo "github.com/surrealdb/surrealdb.go"
+	"github.com/surrealdb/surrealdb.go/pkg/connection"
 	"github.com/surrealdb/surrealdb.go/pkg/models"
 )
 
@@ -123,6 +124,28 @@ func (d *GoDriver) Authenticate(ctx context.Context, token string) error {
 
 func (d *GoDriver) Invalidate(ctx context.Context) error {
 	return d.db.Invalidate(ctx)
+}
+
+func (d *GoDriver) Let(ctx context.Context, key string, val any) error {
+	return d.db.Let(ctx, key, val)
+}
+
+func (d *GoDriver) Unset(ctx context.Context, key string) error {
+	return d.db.Unset(ctx, key)
+}
+
+// Health sends the RPC ping method.
+func (d *GoDriver) Health(ctx context.Context) error {
+	var res connection.RPCResponse[any]
+	return surrealdbgo.Send[any](ctx, d.db, &res, "ping")
+}
+
+func (d *GoDriver) Version(ctx context.Context) (*driver.VersionData, error) {
+	v, err := d.db.Version(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &driver.VersionData{Version: v.Version, Build: v.Build, Timestamp: v.Timestamp}, nil
 }
 
 // ---------------------------------------------------------------------------
