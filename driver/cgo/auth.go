@@ -151,15 +151,24 @@ func (c *Conn) authenticateWith(ctx context.Context, authData any, signup bool) 
 		return "", errors.New("surrealdb: signup needs a record access method (set Access)")
 	}
 
-	return run(ctx, c, func() (string, error) {
-		var params *object
-		if req.level == authRecord {
-			params, err = marshalVars(req.recordParams)
-			if err != nil {
-				return "", fmt.Errorf("marshal auth params: %w", err)
-			}
-			defer params.Free()
+	// Convert record parameters before the call can return, so the
+	// caller may change them as soon as SignIn/SignUp returns, even when
+	// ctx is cancelled first.
+	var params *object
+	if req.level == authRecord {
+		params, err = marshalVars(req.recordParams)
+		if err != nil {
+			return "", fmt.Errorf("marshal auth params: %w", err)
 		}
+	}
+	free := func() {
+		if params != nil {
+			params.Free()
+		}
+	}
+
+	return runOwning(ctx, c, func() (string, error) {
+		defer free()
 
 		var cStrs []*C.char
 		cs := func(s string) C.sr_string_t {
@@ -197,7 +206,7 @@ func (c *Conn) authenticateWith(ctx context.Context, authData any, signup bool) 
 		}
 		defer C.sr_free_string(token)
 		return C.GoString(token), nil
-	}, nil)
+	}, nil, free)
 }
 
 // Authenticate authenticates the connection with an access token.

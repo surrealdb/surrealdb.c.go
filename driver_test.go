@@ -30,6 +30,9 @@ func TestDrivers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			testDriverQuery(t, tc.endpoint)
 		})
+		t.Run(tc.name+" record auth", func(t *testing.T) {
+			testDriverRecordAuth(t, tc.endpoint)
+		})
 	}
 }
 
@@ -95,6 +98,32 @@ func waitForReady(t *testing.T, wsURL string) {
 		time.Sleep(200 * time.Millisecond)
 	}
 	t.Fatalf("SurrealDB at %s did not become ready within 15s", wsURL)
+}
+
+// testDriverRecordAuth checks that record access parameters keep their
+// SurrealDB types on every backend.
+func testDriverRecordAuth(t *testing.T, endpoint string) {
+	t.Helper()
+	ctx := context.Background()
+
+	db, err := surrealdb.Open(ctx, endpoint)
+	require.NoError(t, err)
+	defer db.Close()
+
+	require.NoError(t, db.Use(ctx, "auth_ns", "auth_db"))
+	_, err = db.Query(ctx, `
+		DEFINE FUNCTION fn::need_record($r: record) { RETURN $r };
+		DEFINE ACCESS by_ref ON DATABASE TYPE RECORD
+			SIGNUP (CREATE member SET ref = fn::need_record($ref))
+			DURATION FOR SESSION 1h;
+	`, nil)
+	require.NoError(t, err)
+
+	_, err = db.SignUp(ctx, map[string]any{
+		"NS": "auth_ns", "DB": "auth_db", "AC": "by_ref",
+		"ref": surrealdb.NewRecordID("person", "alice"),
+	})
+	require.NoError(t, err)
 }
 
 func testDriverQuery(t *testing.T, endpoint string) {
