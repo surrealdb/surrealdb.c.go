@@ -414,6 +414,8 @@ func denormalizeValue(v any) any {
 	switch val := v.(type) {
 	case driver.RecordID[any]:
 		return models.NewRecordID(val.Table, val.ID)
+	case time.Duration:
+		return &models.CustomDuration{Duration: val}
 	case map[string]any:
 		out := make(map[string]any, len(val))
 		for k, elem := range val {

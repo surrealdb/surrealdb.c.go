@@ -203,6 +203,7 @@ func testDriverQuery(t *testing.T, endpoint string) {
 	// Let must keep driver types as SurrealDB values on every backend.
 	require.NoError(t, db.Let(ctx, "let_rid", surrealdb.NewRecordID("person", "alice")))
 	require.NoError(t, db.Let(ctx, "let_line", surrealdb.GeometryLine{{Longitude: 1, Latitude: 2}, {Longitude: 3, Latitude: 4}}))
+	require.NoError(t, db.Let(ctx, "let_dur", 90*time.Second))
 	require.NoError(t, db.Let(ctx, "let_rids", []surrealdb.RecordID[string]{surrealdb.NewRecordID("person", "alice")}))
 	require.NoError(t, db.Let(ctx, "let_rid_map", map[string]surrealdb.RecordID[string]{"a": surrealdb.NewRecordID("person", "alice")}))
 	for _, q := range []string{
@@ -210,6 +211,7 @@ func testDriverQuery(t *testing.T, endpoint string) {
 		"RETURN type::is_geometry($let_line)",
 		"RETURN type::is_record($let_rids[0])",
 		"RETURN type::is_record($let_rid_map.a)",
+		"RETURN type::is_duration($let_dur)",
 	} {
 		res, err := db.Query(ctx, q, nil)
 		require.NoError(t, err)
