@@ -8,6 +8,8 @@ SURREALDB_C_REPO     ?= https://github.com/surrealdb/surrealdb.c.git
 SURREALDB_C_REF      ?= main
 SURREALDB_C_DIR      ?= build/surrealdb.c
 SURREALDB_C_FEATURES ?=
+# Extra flags for go test, e.g. GOTESTFLAGS=-race
+GOTESTFLAGS          ?=
 
 # When CARGO_BUILD_TARGET is set (e.g. aarch64-apple-darwin), cargo places
 # artifacts under target/$(CARGO_BUILD_TARGET)/release instead of
@@ -127,21 +129,21 @@ build: $(SURREALDB_C_LIB)
 test: test/mem test/surrealkv test/example
 
 test/mem: $(SURREALDB_C_LIB)
-	SURREALDB_ENDPOINT=mem:// go test -v -count=1 ./...
+	SURREALDB_ENDPOINT=mem:// go test -v -count=1 $(GOTESTFLAGS) ./...
 
 test/surrealkv: $(SURREALDB_C_LIB)
-	SURREALDB_ENDPOINT=surrealkv:// go test -v -count=1 ./...
+	SURREALDB_ENDPOINT=surrealkv:// go test -v -count=1 $(GOTESTFLAGS) ./...
 
 test/rocksdb: $(SURREALDB_C_ROCKSDB_LIB)
-	CGO_LDFLAGS="-L$(CURDIR)/$(SURREALDB_C_ROCKSDB_LIBDIR)" SURREALDB_ENDPOINT=rocksdb:// go test -v -count=1 ./...
+	CGO_LDFLAGS="-L$(CURDIR)/$(SURREALDB_C_ROCKSDB_LIBDIR)" SURREALDB_ENDPOINT=rocksdb:// go test -v -count=1 $(GOTESTFLAGS) ./...
 
 test/example: test/example/basic test/example/surrealql
 
 test/example/basic: $(SURREALDB_C_LIB)
-	cd examples/basic && go build ./... && go test -v -count=1 ./...
+	cd examples/basic && go build ./... && go test -v -count=1 $(GOTESTFLAGS) ./...
 
 test/example/surrealql: $(SURREALDB_C_LIB)
-	cd examples/surrealql && go build ./... && go test -v -count=1 ./...
+	cd examples/surrealql && go build ./... && go test -v -count=1 $(GOTESTFLAGS) ./...
 
 example: example/basic example/surrealql
 
