@@ -74,6 +74,9 @@ func reflectToCValue(fv reflect.Value) (*C.sr_value_t, error) {
 	case reflect.Float32, reflect.Float64:
 		return C.sr_value_float(C.double(fv.Float())), nil
 	case reflect.Slice, reflect.Array:
+		if fv.Kind() == reflect.Slice && fv.IsNil() {
+			return C.sr_value_null(), nil
+		}
 		if fv.Kind() == reflect.Slice && fv.Type().Elem().Kind() == reflect.Uint8 {
 			b := fv.Bytes()
 			if len(b) == 0 {
@@ -95,14 +98,27 @@ func reflectToCValue(fv reflect.Value) (*C.sr_value_t, error) {
 			elems = append(elems, e)
 		}
 		return buildArray(elems), nil
-	case reflect.Struct, reflect.Map:
-		var obj *object
-		var err error
-		if fv.Kind() == reflect.Struct {
-			obj, err = marshalStruct(fv)
-		} else {
-			obj, err = marshalMap(fv)
+	case reflect.Map:
+		if fv.IsNil() {
+			return C.sr_value_null(), nil
 		}
+		// Unlike marshalMap (query variables), keep nil entries as null so
+		// the object has the same shape as on the remote backend.
+		obj := newObject()
+		defer obj.Free()
+		iter := fv.MapRange()
+		for iter.Next() {
+			key := iter.Key().String()
+			e, err := reflectToCValue(iter.Value())
+			if err != nil {
+				return nil, fmt.Errorf("key %s: %w", key, err)
+			}
+			obj.insertCValue(key, e)
+			C.sr_value_free(e)
+		}
+		return C.sr_value_object(obj.cptr()), nil
+	case reflect.Struct:
+		obj, err := marshalStruct(fv)
 		if err != nil {
 			return nil, err
 		}

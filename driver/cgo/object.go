@@ -113,6 +113,13 @@ func (o *object) insertLineString(key string, coords []C.sr_sr_g_coord) {
 	freeCString(cKey)
 }
 
+// insertCValue inserts a copy of cVal. The caller still owns cVal.
+func (o *object) insertCValue(key string, cVal *C.sr_value_t) {
+	cKey := cstring(key)
+	C.sr_object_insert(&o.c, cKey, cVal)
+	freeCString(cKey)
+}
+
 func (o *object) insertNull(key string) {
 	cKey := cstring(key)
 	cVal := C.sr_value_null()

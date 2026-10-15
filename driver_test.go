@@ -204,6 +204,9 @@ func testDriverQuery(t *testing.T, endpoint string) {
 	require.NoError(t, db.Let(ctx, "let_rid", surrealdb.NewRecordID("person", "alice")))
 	require.NoError(t, db.Let(ctx, "let_line", surrealdb.GeometryLine{{Longitude: 1, Latitude: 2}, {Longitude: 3, Latitude: 4}}))
 	require.NoError(t, db.Let(ctx, "let_dur", 90*time.Second))
+	require.NoError(t, db.Let(ctx, "let_nil_slice", []string(nil)))
+	require.NoError(t, db.Let(ctx, "let_nil_bytes", []byte(nil)))
+	require.NoError(t, db.Let(ctx, "let_nil_entry", map[string]any{"a": nil}))
 	require.NoError(t, db.Let(ctx, "let_rids", []surrealdb.RecordID[string]{surrealdb.NewRecordID("person", "alice")}))
 	require.NoError(t, db.Let(ctx, "let_rid_map", map[string]surrealdb.RecordID[string]{"a": surrealdb.NewRecordID("person", "alice")}))
 	for _, q := range []string{
@@ -212,6 +215,9 @@ func testDriverQuery(t *testing.T, endpoint string) {
 		"RETURN type::is_record($let_rids[0])",
 		"RETURN type::is_record($let_rid_map.a)",
 		"RETURN type::is_duration($let_dur)",
+		"RETURN type::is_null($let_nil_slice)",
+		"RETURN type::is_null($let_nil_bytes)",
+		"RETURN type::is_null($let_nil_entry.a)",
 	} {
 		res, err := db.Query(ctx, q, nil)
 		require.NoError(t, err)
