@@ -9,6 +9,9 @@ import (
 // ErrNotSupported is returned when an operation is not supported by the current backend.
 var ErrNotSupported = errors.New("surrealdb: operation not supported by this backend")
 
+// ErrClosed is returned when an operation is attempted on a closed connection.
+var ErrClosed = errors.New("surrealdb: connection closed")
+
 // Driver is the interface that each SurrealDB backend must implement.
 type Driver interface {
 	Close()

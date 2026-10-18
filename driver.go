@@ -26,6 +26,9 @@ func NewRecordID[T any](table string, id T) RecordID[T] {
 // ErrNotSupported is re-exported from the driver package.
 var ErrNotSupported = driver.ErrNotSupported
 
+// ErrClosed is re-exported from the driver package.
+var ErrClosed = driver.ErrClosed
+
 // RemoteOpener is a function that opens a remote SurrealDB connection.
 type RemoteOpener func(ctx context.Context, endpoint string) (Driver, error)
 

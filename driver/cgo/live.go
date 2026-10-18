@@ -96,21 +96,26 @@ func (m *liveQueryMap) remove(id string) (*LiveHandle, bool) {
 	return lq, ok
 }
 
+// closeAll stops every live query and waits for their readers to exit.
+// The caller must hold c.mu for writing.
 func (m *liveQueryMap) closeAll(c *Conn) {
 	m.mu.Lock()
 	sessions := make([]*LiveHandle, 0, len(m.sessions))
 	for _, lq := range m.sessions {
 		sessions = append(sessions, lq)
 	}
-	m.sessions = make(map[string]*LiveHandle)
 	m.mu.Unlock()
 
+	// Send a pill to every session, including ones a concurrent Kill has
+	// claimed: that Kill may still be waiting for the read lock we hold.
 	for _, lq := range sessions {
 		lq.stopping.Store(true)
 		sendPoisonPill(c, lq)
 	}
 	for _, lq := range sessions {
 		<-lq.done
+		killServerSide(c, lq)
+		cleanupPoisonPill(c, lq)
 	}
 }
 
@@ -143,7 +148,7 @@ func killServerSide(c *Conn, lq *LiveHandle) {
 
 // Live creates a live query on the given resource.
 func (c *Conn) Live(ctx context.Context, resource string) (*LiveHandle, error) {
-	return runWithSem(ctx, c.sem, func() (*LiveHandle, error) {
+	return run(ctx, c, func() (*LiveHandle, error) {
 		cRes := cstring(resource)
 		defer freeCString(cRes)
 
@@ -167,7 +172,10 @@ func (c *Conn) Live(ctx context.Context, resource string) (*LiveHandle, error) {
 		c.live.add(lq)
 
 		go func() {
+			// The handle stays in c.live until the stream is freed, so
+			// Close never disconnects while this goroutine uses it.
 			defer close(done)
+			defer c.live.remove(lq.ID)
 			defer close(ch)
 			defer C.sr_stream_kill(streamPtr)
 
@@ -187,25 +195,32 @@ func (c *Conn) Live(ctx context.Context, resource string) (*LiveHandle, error) {
 		}()
 
 		return lq, nil
-	}, func(lq *LiveHandle) {
-		lq.stopping.Store(true)
-		sendPoisonPill(c, lq)
-		go func() {
-			<-lq.done
-			killServerSide(c, lq)
-			cleanupPoisonPill(c, lq)
-			c.live.remove(lq.ID)
-		}()
-	})
+	}, c.Kill)
 }
 
-// Kill stops a live query session.
+// Kill stops a live query session and waits for its reader to exit.
 func (c *Conn) Kill(lq *LiveHandle) {
-	if lq, ok := c.live.remove(lq.ID); ok {
-		lq.stopping.Store(true)
-		sendPoisonPill(c, lq)
+	// Take the connection before claiming the stop, so a Close that runs
+	// in between always sees an unclaimed session and wakes it itself.
+	release, err := c.acquire()
+	if err != nil {
+		// Close has already stopped every live query.
+		return
+	}
+	if !lq.stopping.CompareAndSwap(false, true) {
+		// Already being stopped by another Kill.
+		release()
 		<-lq.done
+		return
+	}
+	sendPoisonPill(c, lq)
+	release()
+
+	<-lq.done
+
+	if release, err := c.acquire(); err == nil {
 		killServerSide(c, lq)
 		cleanupPoisonPill(c, lq)
+		release()
 	}
 }
