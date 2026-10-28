@@ -209,15 +209,21 @@ func testDriverQuery(t *testing.T, endpoint string) {
 	require.NoError(t, db.Let(ctx, "let_nil_entry", map[string]any{"a": nil}))
 	require.NoError(t, db.Let(ctx, "let_rids", []surrealdb.RecordID[string]{surrealdb.NewRecordID("person", "alice")}))
 	require.NoError(t, db.Let(ctx, "let_rid_map", map[string]surrealdb.RecordID[string]{"a": surrealdb.NewRecordID("person", "alice")}))
+	// SurrealDB 2.x names these functions type::is::<kind>; 3.x and later
+	// name them type::is_<kind>.
+	isFn := "type::is_"
+	if strings.HasPrefix(ver.Version, "2.") {
+		isFn = "type::is::"
+	}
 	for _, q := range []string{
-		"RETURN type::is_record($let_rid)",
-		"RETURN type::is_geometry($let_line)",
-		"RETURN type::is_record($let_rids[0])",
-		"RETURN type::is_record($let_rid_map.a)",
-		"RETURN type::is_duration($let_dur)",
-		"RETURN type::is_null($let_nil_slice)",
-		"RETURN type::is_null($let_nil_bytes)",
-		"RETURN type::is_null($let_nil_entry.a)",
+		"RETURN " + isFn + "record($let_rid)",
+		"RETURN " + isFn + "geometry($let_line)",
+		"RETURN " + isFn + "record($let_rids[0])",
+		"RETURN " + isFn + "record($let_rid_map.a)",
+		"RETURN " + isFn + "duration($let_dur)",
+		"RETURN " + isFn + "null($let_nil_slice)",
+		"RETURN " + isFn + "null($let_nil_bytes)",
+		"RETURN " + isFn + "null($let_nil_entry.a)",
 	} {
 		res, err := db.Query(ctx, q, nil)
 		require.NoError(t, err)
