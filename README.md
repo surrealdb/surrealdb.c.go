@@ -2,9 +2,13 @@
 
 Go bindings for embedded SurrealDB via the [surrealdb.c](https://github.com/surrealdb/surrealdb.c) C FFI library.
 
-> **Compatibility:** Tested with **SurrealDB v2** and **v3**. CI runs the full
-> test suite against both versions. The surrealdb.c library defaults to `main`
-> (v3); for v2, pin `SURREALDB_C_REF` to a v2-compatible surrealdb.c commit when you build the static library.
+> **Compatibility:** The embedded engine is whatever surrealdb.c build you
+> link. CI pins surrealdb.c to a fixed commit (`SURREALDB_C_V3_REF` in
+> `.github/workflows/test.yml`, currently Rust SDK 3.0.1) and runs every test
+> with `-race`. Remote tests run against SurrealDB v2, v3.0.1, the latest v3,
+> and the nightly image (the 4.0 line, allowed to fail until 4.0 is tagged).
+> `make` defaults `SURREALDB_C_REF` to `main`; for v2, pin it to a
+> v2-compatible surrealdb.c commit when you build the static library.
 
 ## Quick start
 

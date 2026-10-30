@@ -10,7 +10,8 @@ permissions:
   contents: read
 
 env:
-  SURREALDB_C_V3_REF: main
+  # Keep in sync with SURREALDB_C_V3_REF in test.yml.
+  SURREALDB_C_V3_REF: 039481e0c46fcd9c4096a9eaf85ec3a8fadf80ec
 
 jobs:
   lint:

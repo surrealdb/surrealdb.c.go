@@ -6,21 +6,50 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 env:
+  # surrealdb.c commits the embedded driver links. The embedded engine has no
+  # server, so the engine version under test is whatever these commits pin
+  # (see surrealdb.c's Cargo.lock). Bump them deliberately, never track a
+  # branch.
+  #
   # Last surrealdb.c commit compatible with SurrealDB v2.
-  SURREALDB_C_V2_REF: f962508
-  # The surrealdb.c branch that supports Rust 1.94+
-  SURREALDB_C_V3_REF: main
+  SURREALDB_C_V2_REF: f962508b4b8631a7803393ca9f0de25332320caf
+  # surrealdb.c main as of "Fix build on Rust 1.94+" (Rust SDK 3.0.1).
+  SURREALDB_C_V3_REF: 039481e0c46fcd9c4096a9eaf85ec3a8fadf80ec
+  # Run every Go test with the race detector.
+  GOTESTFLAGS: -race
 
 jobs:
-  # Linux: full matrix with Docker (embedded + remote via go/cgo drivers)
+  # Linux: embedded tests plus remote tests against a SurrealDB server in
+  # Docker, through the pure Go driver (surrealdb.go) or the C driver.
   test-linux:
+    name: linux (server ${{ matrix.surrealdb-version }}, remote ${{ matrix.remote-driver }})
     runs-on: ubuntu-latest
+    # The 4.0 line is tracked through the nightly image until 4.0 is tagged.
+    # The C driver's Rust SDK 3.0.1 refuses 4.x servers, so failures there
+    # are reported but don't fail the run.
+    continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
       matrix:
-        surrealdb-version: [v2, v3.0.1]
+        surrealdb-version: [v2, v3.0.1, v3]
         remote-driver: [go, cgo]
+        experimental: [false]
+        include:
+          - surrealdb-version: nightly
+            remote-driver: go
+            experimental: true
+          - surrealdb-version: nightly
+            remote-driver: cgo
+            experimental: true
+    env:
+      SURREALDB_IMAGE_TAG: ${{ matrix.surrealdb-version }}
+      SURREALDB_REMOTE_DRIVER: ${{ matrix.remote-driver }}
+      SURREALDB_C_FEATURES: ${{ matrix.remote-driver == 'cgo' && 'protocol-ws' || '' }}
+      RUST_TOOLCHAIN: ${{ matrix.surrealdb-version == 'v2' && '1.93.1' || 'stable' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -28,37 +57,84 @@ jobs:
         with:
           go-version: "1.26"
 
+      - name: Select surrealdb.c commit
+        run: |
+          if [ "$SURREALDB_IMAGE_TAG" = "v2" ]; then
+            echo "SURREALDB_C_REF=$SURREALDB_C_V2_REF" >> "$GITHUB_ENV"
+          else
+            echo "SURREALDB_C_REF=$SURREALDB_C_V3_REF" >> "$GITHUB_ENV"
+          fi
+          echo "SURREALDB_C_DIR=$GITHUB_WORKSPACE/.cache/surrealdb.c" >> "$GITHUB_ENV"
+
+      # Only the built library, header and Cargo.toml are cached. On a hit
+      # the Makefile sees a pre-built library in SURREALDB_C_DIR and skips
+      # the clone and cargo build.
+      - name: Cache surrealdb.c build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .cache/surrealdb.c/Cargo.toml
+            .cache/surrealdb.c/include
+            .cache/surrealdb.c/target/release/libsurrealdb_c.a
+          key: surrealdb-c-${{ runner.os }}-${{ env.SURREALDB_C_REF }}-${{ env.RUST_TOOLCHAIN }}-features-${{ env.SURREALDB_C_FEATURES || 'none' }}
+
+      # On a cache hit make sees an up-to-date library and skips the recipe
+      # that copies its header, so copy it here; the Go code must compile
+      # against the header of the library it links.
+      - name: Use the header of the cached library
+        run: |
+          if [ -f "$SURREALDB_C_DIR/include/surrealdb.h" ]; then
+            cp "$SURREALDB_C_DIR/include/surrealdb.h" surrealdb.h
+          fi
+
       - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
         with:
-          toolchain: ${{ matrix.surrealdb-version == 'v2' && '1.93.1' || 'stable' }}
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
 
       - name: Pull SurrealDB Docker image
         run: docker pull surrealdb/surrealdb:${{ matrix.surrealdb-version }}
 
       - name: Run tests
-        env:
-          SURREALDB_IMAGE_TAG: ${{ matrix.surrealdb-version }}
-          SURREALDB_REMOTE_DRIVER: ${{ matrix.remote-driver }}
-          SURREALDB_C_FEATURES: ${{ matrix.remote-driver == 'cgo' && 'protocol-ws' || '' }}
-          SURREALDB_C_REF: ${{ matrix.surrealdb-version == 'v2' && env.SURREALDB_C_V2_REF || env.SURREALDB_C_V3_REF }}
         run: make test
 
   # macOS: embedded CGo tests only (no Docker).
   test-macos:
     runs-on: macos-latest
+    env:
+      SURREALDB_SKIP_DOCKER: "1"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version: "1.26"
+
+      - name: Select surrealdb.c commit
+        run: |
+          echo "SURREALDB_C_REF=$SURREALDB_C_V3_REF" >> "$GITHUB_ENV"
+          echo "SURREALDB_C_DIR=$GITHUB_WORKSPACE/.cache/surrealdb.c" >> "$GITHUB_ENV"
+
+      - name: Cache surrealdb.c build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .cache/surrealdb.c/Cargo.toml
+            .cache/surrealdb.c/include
+            .cache/surrealdb.c/target/release/libsurrealdb_c.a
+          key: surrealdb-c-${{ runner.os }}-${{ env.SURREALDB_C_REF }}-stable-features-none
+
+      # On a cache hit make sees an up-to-date library and skips the recipe
+      # that copies its header, so copy it here; the Go code must compile
+      # against the header of the library it links.
+      - name: Use the header of the cached library
+        run: |
+          if [ -f "$SURREALDB_C_DIR/include/surrealdb.h" ]; then
+            cp "$SURREALDB_C_DIR/include/surrealdb.h" surrealdb.h
+          fi
 
       - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
         with:
           toolchain: stable
 
       - name: Run embedded tests
-        env:
-          SURREALDB_SKIP_DOCKER: "1"
-          SURREALDB_C_REF: ${{ env.SURREALDB_C_V3_REF }}
         run: make test
