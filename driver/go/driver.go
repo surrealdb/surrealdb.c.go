@@ -93,6 +93,41 @@ func (d *GoDriver) Kill(_ string) error {
 	return driver.ErrNotSupported
 }
 
+// goAuth converts driver.Auth to the Go SDK's Auth, which has the same
+// wire names. Map values are converted like query variables, so record
+// access parameters such as record ids keep their SurrealDB types.
+func goAuth(authData any) any {
+	switch a := authData.(type) {
+	case map[string]any:
+		return denormalizeValue(a)
+	case driver.Auth:
+		return &surrealdbgo.Auth{Namespace: a.Namespace, Database: a.Database, Access: a.Access, Username: a.Username, Password: a.Password}
+	case *driver.Auth:
+		if a == nil {
+			return nil
+		}
+		return goAuth(*a)
+	default:
+		return authData
+	}
+}
+
+func (d *GoDriver) SignIn(ctx context.Context, authData any) (string, error) {
+	return d.db.SignIn(ctx, goAuth(authData))
+}
+
+func (d *GoDriver) SignUp(ctx context.Context, authData any) (string, error) {
+	return d.db.SignUp(ctx, goAuth(authData))
+}
+
+func (d *GoDriver) Authenticate(ctx context.Context, token string) error {
+	return d.db.Authenticate(ctx, token)
+}
+
+func (d *GoDriver) Invalidate(ctx context.Context) error {
+	return d.db.Invalidate(ctx)
+}
+
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------

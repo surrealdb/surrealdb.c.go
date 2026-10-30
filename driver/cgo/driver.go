@@ -49,3 +49,19 @@ func (d *CDriver) Live(ctx context.Context, resource string) (string, <-chan dri
 func (d *CDriver) Kill(liveQueryID string) error {
 	return d.conn.KillID(context.Background(), liveQueryID)
 }
+
+func (d *CDriver) SignIn(ctx context.Context, authData any) (string, error) {
+	return d.conn.SignIn(ctx, authData)
+}
+
+func (d *CDriver) SignUp(ctx context.Context, authData any) (string, error) {
+	return d.conn.SignUp(ctx, authData)
+}
+
+func (d *CDriver) Authenticate(ctx context.Context, token string) error {
+	return d.conn.Authenticate(ctx, token)
+}
+
+func (d *CDriver) Invalidate(ctx context.Context) error {
+	return d.conn.Invalidate(ctx)
+}
