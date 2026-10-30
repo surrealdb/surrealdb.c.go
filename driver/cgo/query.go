@@ -12,17 +12,22 @@ import (
 
 // Query executes a SurrealQL query, automatically marshaling vars.
 func (c *Conn) Query(ctx context.Context, sql string, vars any) ([]driver.QueryResult, error) {
+	// Marshal before returning to the caller, who may reuse vars as soon as
+	// Query returns, even if the query keeps running in the background.
 	obj, err := marshalVars(vars)
 	if err != nil {
 		return nil, fmt.Errorf("marshal query vars: %w", err)
 	}
-
-	return runWithSem(ctx, c.sem, func() ([]driver.QueryResult, error) {
+	free := func() {
 		if obj != nil {
-			defer obj.Free()
+			obj.Free()
 		}
+	}
+
+	return runOwning(ctx, c, func() ([]driver.QueryResult, error) {
+		defer free()
 		return c.rawQuery(sql, obj)
-	}, nil)
+	}, nil, free)
 }
 
 func (c *Conn) rawQuery(sql string, vars *object) ([]driver.QueryResult, error) {

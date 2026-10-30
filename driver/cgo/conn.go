@@ -13,7 +13,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
 	"unsafe"
+
+	"github.com/surrealdb/surrealdb.c.go/driver"
 )
 
 // Config holds connection configuration.
@@ -30,9 +34,28 @@ func DefaultConfig() Config {
 
 // Conn is an open connection to a SurrealDB instance.
 type Conn struct {
+	// mu guards c. Every call into the C library that uses c holds mu for
+	// reading until the call returns. Close holds it for writing, so it
+	// waits for in-flight calls to finish, and later calls see c == nil and
+	// fail with driver.ErrClosed instead of using a freed handle.
+	mu   sync.RWMutex
 	c    *C.sr_surreal_t
 	live *liveQueryMap
 	sem  chan struct{}
+
+	// liveMu serialises live query creation; see Live.
+	liveMu sync.Mutex
+}
+
+// acquire takes a read lock on the connection and returns the function that
+// releases it. It fails with driver.ErrClosed once Close has run.
+func (c *Conn) acquire() (release func(), err error) {
+	c.mu.RLock()
+	if c.c == nil {
+		c.mu.RUnlock()
+		return nil, driver.ErrClosed
+	}
+	return c.mu.RUnlock, nil
 }
 
 func surrealError(rc C.int, errPtr C.sr_string_t) error {
@@ -59,17 +82,39 @@ func freeCString(p *C.char) {
 }
 
 // Close disconnects from the database and releases all resources.
+//
+// Close waits for calls already running on other goroutines to return,
+// closes every live query channel, then frees the connection. Calls made
+// after Close return driver.ErrClosed. Close is safe to call more than once
+// and from several goroutines.
+//
+// Freeing the connection shuts down its runtime, which ends every live query
+// stream, so goroutines parked in sr_stream_next return and free their
+// streams. Close waits (with a timeout) for them to do so.
 func (c *Conn) Close() {
-	if c.c != nil {
-		c.live.closeAll(c)
-		C.sr_surreal_disconnect(c.c)
-		c.c = nil
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.c == nil {
+		return
+	}
+	handles := c.live.stopAll()
+	C.sr_surreal_disconnect(c.c)
+	c.c = nil
+
+	deadline := time.NewTimer(readerExitTimeout)
+	defer deadline.Stop()
+	for _, lq := range handles {
+		select {
+		case <-lq.done:
+		case <-deadline.C:
+			return
+		}
 	}
 }
 
 // Use selects the namespace and database for subsequent operations.
 func (c *Conn) Use(ctx context.Context, ns, database string) error {
-	_, err := runWithSem(ctx, c.sem, func() (struct{}, error) {
+	_, err := run(ctx, c, func() (struct{}, error) {
 		cNS := cstring(ns)
 		defer freeCString(cNS)
 

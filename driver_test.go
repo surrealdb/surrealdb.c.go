@@ -30,6 +30,9 @@ func TestDrivers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			testDriverQuery(t, tc.endpoint)
 		})
+		t.Run(tc.name+" record auth", func(t *testing.T) {
+			testDriverRecordAuth(t, tc.endpoint)
+		})
 	}
 }
 
@@ -95,6 +98,32 @@ func waitForReady(t *testing.T, wsURL string) {
 		time.Sleep(200 * time.Millisecond)
 	}
 	t.Fatalf("SurrealDB at %s did not become ready within 15s", wsURL)
+}
+
+// testDriverRecordAuth checks that record access parameters keep their
+// SurrealDB types on every backend.
+func testDriverRecordAuth(t *testing.T, endpoint string) {
+	t.Helper()
+	ctx := context.Background()
+
+	db, err := surrealdb.Open(ctx, endpoint)
+	require.NoError(t, err)
+	defer db.Close()
+
+	require.NoError(t, db.Use(ctx, "auth_ns", "auth_db"))
+	_, err = db.Query(ctx, `
+		DEFINE FUNCTION fn::need_record($r: record) { RETURN $r };
+		DEFINE ACCESS by_ref ON DATABASE TYPE RECORD
+			SIGNUP (CREATE member SET ref = fn::need_record($ref))
+			DURATION FOR SESSION 1h;
+	`, nil)
+	require.NoError(t, err)
+
+	_, err = db.SignUp(ctx, map[string]any{
+		"NS": "auth_ns", "DB": "auth_db", "AC": "by_ref",
+		"ref": surrealdb.NewRecordID("person", "alice"),
+	})
+	require.NoError(t, err)
 }
 
 func testDriverQuery(t *testing.T, endpoint string) {
@@ -164,6 +193,48 @@ func testDriverQuery(t *testing.T, endpoint string) {
 	require.True(t, ok, "expected RecordID[any] for id field, got %T", rec["id"])
 	assert.Equal(t, "person", gotRID.Table)
 	assert.Equal(t, "alice", fmt.Sprintf("%v", gotRID.ID))
+
+	// Health and Version must work on every backend.
+	require.NoError(t, db.Health(ctx))
+	ver, err := db.Version(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, ver.Version)
+
+	// Let must keep driver types as SurrealDB values on every backend.
+	require.NoError(t, db.Let(ctx, "let_rid", surrealdb.NewRecordID("person", "alice")))
+	require.NoError(t, db.Let(ctx, "let_line", surrealdb.GeometryLine{{Longitude: 1, Latitude: 2}, {Longitude: 3, Latitude: 4}}))
+	require.NoError(t, db.Let(ctx, "let_dur", 90*time.Second))
+	require.NoError(t, db.Let(ctx, "let_nil_slice", []string(nil)))
+	require.NoError(t, db.Let(ctx, "let_nil_bytes", []byte(nil)))
+	require.NoError(t, db.Let(ctx, "let_nil_entry", map[string]any{"a": nil}))
+	require.NoError(t, db.Let(ctx, "let_rids", []surrealdb.RecordID[string]{surrealdb.NewRecordID("person", "alice")}))
+	require.NoError(t, db.Let(ctx, "let_rid_map", map[string]surrealdb.RecordID[string]{"a": surrealdb.NewRecordID("person", "alice")}))
+	// SurrealDB 2.x names these functions type::is::<kind>; 3.x and later
+	// name them type::is_<kind>.
+	isFn := "type::is_"
+	if strings.HasPrefix(ver.Version, "2.") {
+		isFn = "type::is::"
+	}
+	for _, q := range []string{
+		"RETURN " + isFn + "record($let_rid)",
+		"RETURN " + isFn + "geometry($let_line)",
+		"RETURN " + isFn + "record($let_rids[0])",
+		"RETURN " + isFn + "record($let_rid_map.a)",
+		"RETURN " + isFn + "duration($let_dur)",
+		"RETURN " + isFn + "null($let_nil_slice)",
+		"RETURN " + isFn + "null($let_nil_bytes)",
+		"RETURN " + isFn + "null($let_nil_entry.a)",
+	} {
+		res, err := db.Query(ctx, q, nil)
+		require.NoError(t, err)
+		require.Len(t, res, 1)
+		require.NoError(t, res[0].Err)
+		v := res[0].Value
+		if arr, ok := v.([]any); ok && len(arr) == 1 {
+			v = arr[0]
+		}
+		assert.Equal(t, true, v, q)
+	}
 
 	// Test with RecordID[int]: numeric record IDs
 	_, err = db.Query(ctx, `CREATE person:123 SET name = "Numeric", age = 99`, nil)
