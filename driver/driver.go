@@ -30,4 +30,14 @@ type Driver interface {
 	Authenticate(ctx context.Context, token string) error
 	// Invalidate clears the connection's authentication.
 	Invalidate(ctx context.Context) error
+
+	// Let defines a connection variable, available as $key in later queries.
+	Let(ctx context.Context, key string, val any) error
+	// Unset removes a variable defined with Let.
+	Unset(ctx context.Context, key string) error
+
+	// Health returns nil if the database is reachable and healthy.
+	Health(ctx context.Context) error
+	// Version returns the version of the server or embedded engine.
+	Version(ctx context.Context) (*VersionData, error)
 }

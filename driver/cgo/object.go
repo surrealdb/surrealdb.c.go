@@ -113,6 +113,13 @@ func (o *object) insertLineString(key string, coords []C.sr_sr_g_coord) {
 	freeCString(cKey)
 }
 
+// insertCValue inserts a copy of cVal. The caller still owns cVal.
+func (o *object) insertCValue(key string, cVal *C.sr_value_t) {
+	cKey := cstring(key)
+	C.sr_object_insert(&o.c, cKey, cVal)
+	freeCString(cKey)
+}
+
 func (o *object) insertNull(key string) {
 	cKey := cstring(key)
 	cVal := C.sr_value_null()
@@ -141,14 +148,18 @@ func (o *object) insertDatetime(key string, t time.Time) {
 	freeCString(cRFC)
 }
 
+// buildArray returns a new array value holding copies of cValues. The
+// caller still owns cValues.
+func buildArray(cValues []*C.sr_value_t) *C.sr_value_t {
+	if len(cValues) == 0 {
+		return C.sr_value_array()
+	}
+	return C.build_array(&cValues[0], C.int(len(cValues)))
+}
+
 func (o *object) insertArray(key string, cValues []*C.sr_value_t) {
 	cKey := cstring(key)
-	var cArr *C.sr_value_t
-	if len(cValues) == 0 {
-		cArr = C.sr_value_array()
-	} else {
-		cArr = C.build_array(&cValues[0], C.int(len(cValues)))
-	}
+	cArr := buildArray(cValues)
 	C.sr_object_insert(&o.c, cKey, cArr)
 	C.sr_value_free(cArr)
 	freeCString(cKey)

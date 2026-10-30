@@ -13,6 +13,7 @@ type Driver = driver.Driver
 type QueryResult = driver.QueryResult
 type Notification = driver.Notification
 type Auth = driver.Auth
+type VersionData = driver.VersionData
 type RecordID[T any] = driver.RecordID[T]
 type Decimal = driver.Decimal
 type UUID = driver.UUID

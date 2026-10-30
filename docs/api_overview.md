@@ -1,59 +1,76 @@
 # API overview
 
+Everything goes through the `surrealdb.Driver` interface returned by
+`surrealdb.Open`. Every method that talks to the database takes a
+`context.Context`.
+
 ## Connection lifecycle
 
 ```go
 ctx := context.Background()
 
-db, err := surrealdb.Open(ctx, "mem://")     // or "surrealkv://path", "ws://host:port"
+db, err := surrealdb.Open(ctx, "mem://") // or "surrealkv://path", "rocksdb://path", "ws://host:port"
+if err != nil {
+    log.Fatal(err)
+}
 defer db.Close()
 
-db.Use(ctx, "my_namespace", "my_database")
+if err := db.Use(ctx, "my_namespace", "my_database"); err != nil {
+    log.Fatal(err)
+}
 
-ver, _ := db.Version()  // "2.4.1"
-db.Health()              // nil if healthy
+ver, _ := db.Version(ctx) // ver.Version == "3.0.1" for the embedded engine
+err = db.Health(ctx)      // nil if healthy
 ```
+
+With the C backend (`mem://`, `surrealkv://`, `rocksdb://`, and
+`ws://`/`http://` when no remote driver is registered), `Close` waits for calls
+already running on other goroutines, stops all live queries, then frees the
+connection. It is safe to call more than once and from several goroutines. Any
+call made after `Close` returns `surrealdb.ErrClosed`. A cancelled context
+makes the call return `ctx.Err()` straight away, but the C call it started
+cannot be interrupted and finishes in the background.
+
+With the remote Go driver (`driver/go`), `Close` closes the surrealdb.go
+connection, and errors after `Close` come from surrealdb.go rather than
+`surrealdb.ErrClosed`.
 
 ## Querying
 
-All query methods accept a `context.Context` for timeout/cancellation.
-The `vars` parameter accepts `nil`, `*Object`, `map[string]any`, or any struct
-with `db:"..."` tags — marshaling is automatic.
+`vars` accepts `nil`, a `map[string]any`, or a struct. Struct fields use
+`cbor:"name"` tags (`cbor:"name,omitempty"` skips zero values); untagged
+fields use the lower-cased field name.
 
 ```go
-// Simple query
 results, err := db.Query(ctx, "SELECT * FROM person", nil)
 
-// Parameterized with a map
-results, err := db.Query(ctx,
+results, err = db.Query(ctx,
     "SELECT * FROM person WHERE age >= $min_age",
     map[string]any{"min_age": 18},
 )
 
-// Parameterized with a struct
-results, err := db.Query(ctx,
-    "SELECT * FROM person WHERE age >= $min_age",
-    struct { MinAge int `db:"min_age"` }{MinAge: 18},
-)
-
-// Multi-statement
-results, err := db.Query(ctx,
-    "SELECT count() AS n FROM person GROUP ALL;" +
-    "SELECT math::mean(age) AS avg FROM person GROUP ALL;",
+// Multi-statement: results[0] is the count, results[1] the average.
+results, err = db.Query(ctx,
+    "SELECT count() AS n FROM person GROUP ALL;"+
+        "SELECT math::mean(age) AS avg FROM person GROUP ALL;",
     nil,
 )
-// results[0] has the count, results[1] has the average
+for _, r := range results {
+    if r.Err != nil {
+        log.Println("statement error:", r.Err)
+        continue
+    }
+    fmt.Println(r.Value) // []any, map[string]any or a scalar
+}
 ```
 
-## Typed queries with `Query[T]`
-
-`surrealdb.Query[T]` unmarshals each result row into a Go struct automatically:
+### Typed queries with `Query[T]`
 
 ```go
 type Person struct {
-    ID   string `db:"id"`
-    Name string `db:"name"`
-    Age  int64  `db:"age"`
+    ID   surrealdb.RecordID[string] `cbor:"id,omitempty"`
+    Name string                     `cbor:"name"`
+    Age  int64                      `cbor:"age"`
 }
 
 results, err := surrealdb.Query[Person](ctx, db, "SELECT * FROM person", nil)
@@ -62,65 +79,78 @@ for _, p := range results[0].Values() {
 }
 ```
 
-## Reading untyped results
+## Connection variables
 
 ```go
-for _, stmt := range results {
-    if stmt.Err() != nil {
-        log.Println("statement error:", stmt.Err())
-        continue
-    }
-    for _, val := range stmt.Values() {
-        switch val.Tag() {
-        case surrealdb.ValueObject:
-            for _, kv := range val.AsObject() {
-                fmt.Printf("%s = %s\n", kv.Key, kv.Value.String())
-            }
-        case surrealdb.ValueString:
-            fmt.Println(val.AsString())
-        case surrealdb.ValueNumber:
-            fmt.Println(val.AsInt())
-        }
-    }
-}
+db.Let(ctx, "min_age", 18) // available as $min_age in later queries
+db.Unset(ctx, "min_age")
 ```
 
-## Building objects
+`Let` accepts the same value types as query variables.
+
+## Authentication
 
 ```go
-// Manual
-obj := surrealdb.NewObject()
-obj.InsertStr("name", "Alice")
-obj.InsertInt("age", 30)
-obj.InsertBool("active", true)
-defer obj.Free()
+// Root, namespace or database user, chosen by which fields are set.
+token, err := db.SignIn(ctx, surrealdb.Auth{
+    Namespace: "app", Database: "app",
+    Username:  "admin", Password: "secret",
+})
 
-// From a Go struct
-type Person struct {
-    Name   string `db:"name"`
-    Age    int    `db:"age"`
-    Active bool   `db:"active"`
-}
-obj, err := surrealdb.MarshalObject(Person{"Alice", 30, true})
-defer obj.Free()
+// Record access: set Access. Use a map to pass custom fields to the
+// access method's SIGNIN/SIGNUP clause ($email, $pass below).
+token, err = db.SignUp(ctx, map[string]any{
+    "NS": "app", "DB": "app", "AC": "account",
+    "email": "ada@example.com", "pass": "s3cret",
+})
+
+db.Authenticate(ctx, token) // reuse a token
+db.Invalidate(ctx)          // sign out
 ```
 
 ## Live queries
 
 ```go
-// Start listening for changes on the "person" table
-lq, err := db.Live(ctx, "person")
+id, ch, kill, err := db.Live(ctx, "person") // a table, or a record id like "person:alice"
 if err != nil {
     log.Fatal(err)
 }
 
-// Read notifications from the channel
 go func() {
-    for n := range lq.Ch {
-        fmt.Printf("%s: %s\n", n.Action, n.Data.String())
+    for n := range ch { // closed when the live query stops
+        fmt.Println(n.Action, n.Data)
     }
 }()
 
-// ... later, stop the live query
-db.Kill(lq)
+kill()       // stop it, or:
+db.Kill(id)  // stop it by id
 ```
+
+`id` is the server's live query id, the same as `Notification.QueryID`,
+when `Live` can find it (it uses `INFO FOR TABLE`, which a record user may not
+be allowed to run); otherwise it is a local id. `Kill` accepts either.
+
+Stopping a live query writes nothing to the database. When `kill` returns,
+the channel is closed and nothing more is delivered. surrealdb.c cannot
+interrupt a stream that is waiting for its next event, so the engine-side
+live query is released on its next event, or when `Close` frees the
+connection.
+
+## Compared with surrealdb.go
+
+The method names and types follow [surrealdb.go](https://github.com/surrealdb/surrealdb.go)
+where they overlap: `Use`, `SignIn`, `SignUp`, `Authenticate`, `Invalidate`,
+`Let`, `Unset`, `Version` (returning `*VersionData`), and `Auth` (same fields
+and wire names). The remaining differences:
+
+| | surrealdb.c.go | surrealdb.go |
+|---|---|---|
+| Close | `Close()` | `Close(ctx) error` |
+| Query | `db.Query(ctx, sql, vars)` and `surrealdb.Query[T](ctx, db, sql, vars)` returning `[]Result[T]` | `surrealdb.Query[T](ctx, db, sql, vars)` returning `*[]QueryResult[T]` |
+| Live queries | `Live` returns the id, a channel and a stop function | `Live` returns the id; `LiveNotifications(id)` returns the channel |
+| Kill | `Kill(id)` | `Kill(ctx, db, id)` |
+| Health | `Health(ctx)` | none |
+| CRUD helpers, `Info`, refresh tokens, sessions, transactions | not available | available |
+
+Sessions and interactive transactions are not available because surrealdb.c
+does not support them yet.
