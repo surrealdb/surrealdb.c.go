@@ -4,7 +4,7 @@ go 1.24
 
 require (
 	github.com/stretchr/testify v1.8.4
-	github.com/surrealdb/surrealdb.c.go/driver/go v0.0.0
+	github.com/surrealdb/surrealdb.c.go/driver/go v0.0.0-20260309045635-5d82e5f3b657
 )
 
 replace github.com/surrealdb/surrealdb.c.go/driver/go => ./driver/go
